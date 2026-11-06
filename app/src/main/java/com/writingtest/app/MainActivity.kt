@@ -13,6 +13,8 @@ import android.print.PrintAttributes
 import android.print.PrintManager
 import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
+import android.os.Handler
+import android.os.Looper
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -48,6 +50,11 @@ class MainActivity : AppCompatActivity() {
     private var nativeTts: TextToSpeech? = null
     private var ttsReady = false
     private var pendingTts: Pair<String, Float>? = null
+    private var ttsEngineCandidates: List<String?> = emptyList()
+    private var ttsEngineIndex = 0
+    private var ttsInitGeneration = 0
+    private var ttsInitFailed = false
+    private var hasResumedOnce = false
 
     private val pickImageLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -99,6 +106,13 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         binding.webView.saveState(outState)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Retry after the user installs Korean voices in Android settings.
+        if (hasResumedOnce && ttsInitFailed) initializeNativeTts()
+        hasResumedOnce = true
     }
 
     override fun onPause() {
@@ -205,27 +219,80 @@ class MainActivity : AppCompatActivity() {
     // The embedded WebView lacks window.speechSynthesis on Android.
     // Use the Android system TTS engine without modifying the HTML dictation flow.
     private fun initializeNativeTts() {
-        nativeTts = TextToSpeech(applicationContext) { status ->
-            runOnUiThread {
-                val engine = nativeTts
-                if (status == TextToSpeech.SUCCESS && engine != null) {
-                    val languageStatus = engine.setLanguage(Locale.KOREAN)
-                    ttsReady = languageStatus != TextToSpeech.LANG_MISSING_DATA &&
-                        languageStatus != TextToSpeech.LANG_NOT_SUPPORTED
-                    if (ttsReady) {
-                        pendingTts?.let { (text, rate) ->
-                            pendingTts = null
-                            speakNative(text, rate)
-                        }
-                    } else {
+        ttsInitFailed = false
+        ttsReady = false
+        ttsEngineIndex = 0
+        // Prefer the user's system default, then try other installed engines.
+        val installed = packageManager.queryIntentServices(
+            Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0
+        ).mapNotNull { it.serviceInfo?.packageName }.distinct().sortedWith(
+            compareBy<String> {
+                when {
+                    it == "com.google.android.tts" -> 0
+                    it.startsWith("com.samsung") -> 1
+                    else -> 2
+                }
+            }.thenBy { it }
+        )
+        ttsEngineCandidates = listOf(null) + installed
+        tryNextTtsEngine()
+    }
+
+    private fun tryNextTtsEngine() {
+        ttsReady = false
+        nativeTts?.stop()
+        nativeTts?.shutdown()
+        nativeTts = null
+
+        if (ttsEngineIndex >= ttsEngineCandidates.size) {
+            ttsInitFailed = true
+            pendingTts = null
+            toast("한국어 TTS가 없습니다. 설정 → 일반 → 글자 읽어주기에서 한국어 음성을 설치하세요.")
+            return
+        }
+
+        val enginePackage = ttsEngineCandidates[ttsEngineIndex++]
+        val generation = ++ttsInitGeneration
+        val listener = TextToSpeech.OnInitListener { status ->
+            // An engine may invoke OnInitListener from its constructor.
+            // Posting ensures nativeTts has been assigned before access.
+            Handler(Looper.getMainLooper()).post {
+                if (generation != ttsInitGeneration || isFinishing || isDestroyed) return@post
+                val current = nativeTts ?: return@post
+
+                // Some Samsung engines require ko-KR rather than language-only ko.
+                val koreanReady = status == TextToSpeech.SUCCESS &&
+                    listOf(Locale.KOREA, Locale.KOREAN).any { locale ->
+                        try { current.setLanguage(locale) >= TextToSpeech.LANG_AVAILABLE }
+                        catch (_: Exception) { false }
+                    }
+                if (koreanReady) {
+                    ttsReady = true
+                    ttsInitFailed = false
+                    pendingTts?.let { (text, rate) ->
                         pendingTts = null
-                        toast("기본 TTS 엔진에 한국어 음성이 없습니다. 기기 설정을 확인해 주세요.")
+                        speakNative(text, rate)
                     }
                 } else {
-                    pendingTts = null
-                    toast("기기의 음성 읽기 엔진을 시작하지 못했습니다.")
+                    // The default engine may lack Korean even if another installed
+                    // Samsung / Google engine provides it.
+                    if (ttsEngineCandidates.size == 1) {
+                        val additional = try { current.engines.map { it.name } }
+                            catch (_: Exception) { emptyList() }
+                        ttsEngineCandidates = listOf(null) + additional.distinct()
+                    }
+                    tryNextTtsEngine()
                 }
             }
+        }
+        nativeTts = try {
+            if (enginePackage == null) TextToSpeech(applicationContext, listener)
+            else TextToSpeech(applicationContext, listener, enginePackage)
+        } catch (_: Exception) {
+            // Try the next installed engine, never claiming the tablet has no TTS
+            // solely because one engine could not start.
+            tryNextTtsEngine()
+            return
         }
     }
 
