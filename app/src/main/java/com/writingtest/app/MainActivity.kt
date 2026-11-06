@@ -12,6 +12,7 @@ import android.os.Environment
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.provider.MediaStore
+import android.speech.tts.TextToSpeech
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -38,11 +39,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import java.util.UUID
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var pendingPermissionRequest: PermissionRequest? = null
+    private var nativeTts: TextToSpeech? = null
+    private var ttsReady = false
+    private var pendingTts: Pair<String, Float>? = null
 
     private val pickImageLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -79,6 +84,7 @@ class MainActivity : AppCompatActivity() {
 
         val webView = binding.webView
         configureWebView(webView)
+        initializeNativeTts()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -95,7 +101,17 @@ class MainActivity : AppCompatActivity() {
         binding.webView.saveState(outState)
     }
 
+    override fun onPause() {
+        pendingTts = null
+        nativeTts?.stop()
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        pendingTts = null
+        nativeTts?.stop()
+        nativeTts?.shutdown()
+        nativeTts = null
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null
         pendingPermissionRequest?.deny()
@@ -186,6 +202,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // The embedded WebView lacks window.speechSynthesis on Android.
+    // Use the Android system TTS engine without modifying the HTML dictation flow.
+    private fun initializeNativeTts() {
+        nativeTts = TextToSpeech(applicationContext) { status ->
+            runOnUiThread {
+                val engine = nativeTts
+                if (status == TextToSpeech.SUCCESS && engine != null) {
+                    val languageStatus = engine.setLanguage(Locale.KOREAN)
+                    ttsReady = languageStatus != TextToSpeech.LANG_MISSING_DATA &&
+                        languageStatus != TextToSpeech.LANG_NOT_SUPPORTED
+                    if (ttsReady) {
+                        pendingTts?.let { (text, rate) ->
+                            pendingTts = null
+                            speakNative(text, rate)
+                        }
+                    } else {
+                        pendingTts = null
+                        toast("기본 TTS 엔진에 한국어 음성이 없습니다. 기기 설정을 확인해 주세요.")
+                    }
+                } else {
+                    pendingTts = null
+                    toast("기기의 음성 읽기 엔진을 시작하지 못했습니다.")
+                }
+            }
+        }
+    }
+
+    private fun speakNative(text: String, rate: Float) {
+        val safeText = text.trim().take(1500)
+        if (safeText.isEmpty()) return
+        val safeRate = rate.coerceIn(0.8f, 1.15f)
+        if (!ttsReady) {
+            pendingTts = safeText to safeRate
+            return
+        }
+        nativeTts?.setSpeechRate(safeRate)
+        val result = nativeTts?.speak(
+            safeText, TextToSpeech.QUEUE_FLUSH, null, "writing-test-" + System.nanoTime()
+        )
+        if (result == TextToSpeech.ERROR) toast("음성을 재생하지 못했습니다.")
+    }
+
     private fun grantWebPermissionRequest(request: PermissionRequest) {
         request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
     }
@@ -195,6 +253,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private inner class AndroidBridge {
+        @JavascriptInterface
+        fun ttsSpeak(text: String, rate: Double) {
+            runOnUiThread { speakNative(text, rate.toFloat()) }
+        }
+
+        @JavascriptInterface
+        fun ttsStop() {
+            runOnUiThread {
+                pendingTts = null
+                nativeTts?.stop()
+            }
+        }
+
         @JavascriptInterface
         fun saveBase64File(dataUrl: String, suggestedFileName: String?) {
             lifecycleScope.launch(Dispatchers.IO) {
