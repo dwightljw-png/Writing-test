@@ -1,0 +1,200 @@
+const GAME_GENERIC=['안','않','게','개','에','애','돼','되','어','떻','겠','었','썼','잊','잃','읽','같','갔','수','을','를','의','이','히','깨','께'];
+let game=null,gameDrag=null,gameFxTimeout=null;
+let gameChaseTimers=[],gameChaseSerial=0;
+function gameStopChase(){
+ gameChaseSerial++;
+ gameChaseTimers.forEach(clearTimeout);gameChaseTimers=[];
+ const pool=$('gamePool');if(pool)pool.classList.remove('gameChase1','gameChase2','gameChase3');
+}
+function gameSetChaseLevel(level,serial){
+ if(!game||game.solved||serial!==gameChaseSerial)return;
+ const pool=$('gamePool');if(!pool||pool.classList.contains('hidden'))return;
+ pool.classList.remove('gameChase1','gameChase2','gameChase3');pool.classList.add('gameChase'+level);
+ const scale=level===1?.48:level===2?.85:1.25;
+ const period=level===1?2.2:level===2?1.2:.64;
+ for(const [i,tile] of [...pool.children].entries()){
+  // Per-card paths avoid everything moving in lockstep; no animation in JS loop.
+  const n=i*17.31;
+  const dx=Math.round(Math.sin(n+1.2)*22*scale),dy=Math.round(Math.cos(n+2)*15*scale);
+  const dx2=Math.round(Math.cos(n+3)*20*scale),dy2=Math.round(Math.sin(n+4)*18*scale);
+  tile.style.setProperty('--chase-x',dx+'px');tile.style.setProperty('--chase-y',dy+'px');
+  tile.style.setProperty('--chase-x2',dx2+'px');tile.style.setProperty('--chase-y2',dy2+'px');
+  tile.style.setProperty('--chase-x3',-dx+'px');tile.style.setProperty('--chase-y3',dy2+'px');
+  tile.style.setProperty('--chase-x4',-dx2+'px');tile.style.setProperty('--chase-y4',-dy+'px');
+  tile.style.setProperty('--chase-duration',(period+(i%4)*.15)+'s');
+  tile.style.setProperty('--chase-delay',(-(i%9)*.11)+'s');
+ }
+}
+function gameStartChase(){
+ gameStopChase();const serial=gameChaseSerial;
+ // First 25 seconds: calm; the longer the child waits, the faster the remaining cards move.
+ for(const [time,level] of [[25000,1],[45000,2],[70000,3]]){
+  gameChaseTimers.push(setTimeout(()=>gameSetChaseLevel(level,serial),time));
+ }
+}
+
+function gameTokenLabel(ch){return ch;}
+function gameSentence(raw){return String(raw||'').normalize('NFC').replace(/\s+/g,' ').trim();}
+// v1.6.2: Blank answer cells BETWEEN written syllables are word boundaries.
+// Leading and trailing spare cells never become part of the submitted answer.
+function gameAnswerText(){
+ if(!game)return '';
+ const cells=game.slots.map(id=>id?(game.tiles.find(t=>t.id===id)?.char||''):'');
+ const first=cells.findIndex(Boolean),last=cells.findLastIndex(Boolean);
+ if(first<0)return '';
+ return cells.slice(first,last+1).map(c=>c||' ').join('').replace(/ +/g,' ');
+}
+function gameHangulParts(ch){
+ if(typeof ch!=='string'||ch.length!==1)return null;
+ const n=ch.charCodeAt(0)-0xAC00;if(n<0||n>=11172)return null;
+ return{l:Math.floor(n/588),v:Math.floor(n%588/28),t:n%28};
+}
+function gameCompose(l,v,t){return String.fromCharCode(0xAC00+(l*21+v)*28+t)}
+// Korean ㅐ / ㅔ is tested on the *vowel inside a syllable*, not just the
+// literal jamo. Thus 게 -> 개, 책 -> 첵, 내 -> 네, etc.
+function gameVowelConfusion(ch){
+ if(ch==='ㅐ')return 'ㅔ';if(ch==='ㅔ')return 'ㅐ';
+ const p=gameHangulParts(ch);if(!p)return null;
+ if(p.v===1)return gameCompose(p.l,5,p.t); // ㅐ -> ㅔ
+ if(p.v===5)return gameCompose(p.l,1,p.t); // ㅔ -> ㅐ
+ return null;
+}
+// Alternatives are tied to the original final consonant; there is no one-size-
+// fits-all random batch of misleading words. Preserve initial and medial.
+const GAME_CODA_ALTS={
+ 1:[2,24,21],2:[1,24],3:[1,19],4:[6,21,16,8],5:[4,22],6:[4,21,27],
+ 7:[19,20,22,23,25],8:[4,21,16],9:[1,8,21],10:[16,8],11:[8,16,1],
+ 12:[8,19],13:[8,25],14:[8,26],15:[8,27],16:[21,4,17],17:[18,26,16],
+ 18:[17,19],19:[20,7,22,23],20:[19,7,22],21:[4,16,1],22:[23,19,7],
+ 23:[22,19,7],24:[1,2],25:[7,19],26:[17,16],27:[7,19,4]
+};
+function gameFinalConfusions(ch){
+ const p=gameHangulParts(ch);if(!p||!p.t)return [];
+ const nearby=(GAME_NEAR[ch]||[]).filter(alt=>{
+  const q=gameHangulParts(alt);
+  return q&&q.l===p.l&&q.v===p.v&&q.t!==p.t;
+ });
+ const systematic=(GAME_CODA_ALTS[p.t]||[0,19,4]).map(t=>gameCompose(p.l,p.v,t));
+ return [...new Set([...nearby,...systematic])].filter(x=>x!==ch);
+}
+const GAME_OTHER_VOWELS={
+ 0:[4],4:[0], // ㅏ / ㅓ
+ 8:[13],13:[8], // ㅗ / ㅜ
+ 12:[17],17:[12], // ㅛ / ㅠ
+ 3:[7],7:[3], // ㅒ / ㅖ
+ 2:[6],6:[2], // ㅑ / ㅕ
+ 9:[14],14:[9], // ㅘ / ㅝ
+ 10:[11,15],11:[10,15],15:[10,11], // ㅙ / ㅚ / ㅞ
+ 19:[20],20:[19] // ㅢ / ㅣ
+};
+const GAME_INITIAL_ALTS={0:[1,15],1:[0,15],15:[0,1], // ㄱ/ㄲ/ㅋ
+ 3:[4,16],4:[3,16],16:[3,4], // ㄷ/ㄸ/ㅌ
+ 7:[8,17],8:[7,17],17:[7,8], // ㅂ/ㅃ/ㅍ
+ 9:[10],10:[9], // ㅅ/ㅆ
+ 12:[13,14],13:[12,14],14:[12,13], // ㅈ/ㅉ/ㅊ
+ 2:[5],5:[2] // ㄴ/ㄹ : limited sound confusions
+ };
+function gameOtherConfusions(ch){
+ const opts=[...(GAME_NEAR[ch]||[])];const p=gameHangulParts(ch);
+ if(p){
+  const initial=GAME_INITIAL_ALTS[p.l]||[];
+  for(const l of initial)opts.push(gameCompose(l,p.v,p.t));
+  // Secondary school-age confusions, only when the required ㅐ/ㅔ and
+  // 받침 contrasts have already been added and the 1.5x pool has room.
+  for(const v of GAME_OTHER_VOWELS[p.v]||[])opts.push(gameCompose(p.l,v,p.t));
+ }
+ return [...new Set(opts)].filter(x=>x!==ch&&x!==' ');
+}
+// v1.6.3: derive tempting *spoken-form* tiles from the source sentence,
+// not a hardcoded single-grade word list. This is NOT a spelling correction:
+// only the actual printed source is the answer; spoken forms are decoys.
+const GAME_ONSET_TO_CODA={0:1,1:2,2:4,3:7,5:8,6:16,7:17,9:19,10:20,11:0,12:22,14:23,15:24,16:25,17:26,18:27};
+// Double finals are split at a vowel-start suffix: 읽어 -> 일거, 닭이 -> 달기.
+const GAME_SPLIT_FINAL={3:[1,9],5:[4,12],6:[0,2],9:[8,0],10:[8,6],11:[8,7],12:[8,9],13:[8,16],14:[8,17],15:[0,8],18:[17,9]};
+const GAME_PHONETIC_PAIRS=[
+ ['가라','갈아'],['읽어','일거'],['읽으면','일그면'],['읽어서','일거서'],
+ ['먹어','머거'],['먹었다','머걷따'],['갈아','가라'],['닭이','달기'],
+ ['앉아','안자'],['않아','아나'],['많아','마나'],['싫어','시러'],
+ ['좋아','조아'],['놓아','노아'],['같이','가치'],['굳이','구지'],
+ ['꽃이','꼬치'],['낮이','나지'],['밟아','발바'],['넓어','널버'],
+ ['없이','업씨'],['있어','이써'],['없어','업써'],['읽다','익따']
+];
+function gamePhoneticNeighbors(word){
+ const letters=Array.from(word),out=[];
+ const add=arr=>{if(arr&&arr.join('')!==word)out.push(arr)};
+ // Prefix/context-aware familiar homophone pairs; long sentences work too.
+ for(const [a,b] of GAME_PHONETIC_PAIRS){
+  for(const [from,to] of [[a,b],[b,a]]){
+   let start=0,idx;
+   while((idx=word.indexOf(from,start))>=0){
+    add([...Array.from(word.slice(0,idx)),...Array.from(to),...Array.from(word.slice(idx+from.length))]);
+    start=idx+from.length;
+   }
+  }
+ }
+ // Conservative liaison: apply only *within the same word* and before ㅇ.
+ for(let i=0;i<letters.length-1;i++){
+  const a=gameHangulParts(letters[i]),b=gameHangulParts(letters[i+1]);
+  if(!a||!b||b.l!==11||a.t===0||a.t===21)continue;
+  let first=0,moved=null;
+  if(a.t===27){first=0;moved=11;} // 좋아 -> 조아
+  else if(a.t===6){first=0;moved=2;} // 많아 -> 마나 (ㅎ 탈락)
+  else if(a.t===15){first=0;moved=5;} // 싫어 -> 시러 (ㅎ 탈락)
+  else if(GAME_SPLIT_FINAL[a.t]){
+   [first,moved]=GAME_SPLIT_FINAL[a.t];
+   if(a.t===6||a.t===15)continue;
+  }else{
+   // ㄷ/ㅌ + 이 are palatalized: 같이 -> 가치, 굳이 -> 구지.
+   moved=Object.keys(GAME_ONSET_TO_CODA).find(k=>GAME_ONSET_TO_CODA[k]===a.t);
+   moved=moved===undefined?null:Number(moved);
+   if(a.v===0&&a.t===25&&b.v===20)moved=14;
+   else if(a.t===25&&b.v===20)moved=14;
+   else if(a.t===7&&b.v===20)moved=12;
+  }
+  if(moved===null||moved===undefined)continue;
+  const v=letters.slice();v[i]=gameCompose(a.l,a.v,first);v[i+1]=gameCompose(moved,b.v,b.t);add(v);
+ }
+ // Reverse liaison (spoken form -> spelling form), only for a vetted pair
+ // of neighboring syllables where the consonant can be a simple final.
+ // Guard against meaningless giant decoy pools: at most 2 reverse cases.
+ let reverse=0;
+ for(let i=0;i<letters.length-1&&reverse<2;i++){
+  const a=gameHangulParts(letters[i]),b=gameHangulParts(letters[i+1]);
+  if(!a||!b||a.t||b.l===11)continue;
+  const final=GAME_ONSET_TO_CODA[b.l];
+  if(!final)continue;
+  // Useful school-age homophones without treating every adjacent pair as a word.
+  const current=letters[i]+letters[i+1];
+  if(!['가라','머거','아라','나라','모라','일거','가치','구지'].includes(current))continue;
+  const v=letters.slice();v[i]=gameCompose(a.l,a.v,final);v[i+1]=gameCompose(11,b.v,b.t);add(v);reverse++;
+ }
+ return out;
+}
+function gamePhoneticDecoys(sentence){
+ const tokens=String(sentence||'').normalize('NFC').match(/[가-힣]+/g)||[];
+ const wanted=new Set(Array.from(sentence).filter(c=>/^[가-힣]$/.test(c)));
+ const extras=[];const seen=new Set();
+ for(const word of tokens){
+  // Long words are processed with paired-syllable rules; all input words remain possible.
+  for(const variant of gamePhoneticNeighbors(word)){
+   for(const ch of variant){
+    if(!gameHangulParts(ch)||wanted.has(ch)||seen.has(ch))continue;
+    seen.add(ch);extras.push(ch);
+   }
+  }
+ }
+ return extras;
+}
+
+// v1.6.4: context-linked orthography traps for common elementary-school mistakes.
+// These are *decoy tiles*, never suggested corrections. The source sentence is
+// always the sole answer, because some alternatives are legitimate in other contexts.
+// Longer, specific word forms are tested before short syllable-level forms.
+const GAME_SPELLING_TRAPS=[
+ ['어떻게','어떡해'],['어떡해','어떻게'],
+ ['며칠','몇일'],['몇일','며칠'],
+ ['왠지','웬지'],['웬일','왠일'],['웬만','왠만'],
+ ['금세','금새'],['아니에요','아니예요'],
+ ['설거지','설겆이'],['오랜만','오랫만'],['역할','역활'],
+ ['개수','갯수'],['눈곱','눈꼽'],['어이없','어의없'],
+ ['거예요','거에요'],['거에요','거예요'],

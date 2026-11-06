@@ -1,0 +1,200 @@
+.weaknessEntry{display:flex;flex-wrap:wrap;gap:3px 12px;border-bottom:1px solid #edf0f7;padding:8px 1px}
+.weaknessEntry>.small{width:100%}
+.paperErrorEntry{width:100%;margin-top:7px}
+</style>
+
+<style id="cyber-writing-skin">
+/* CYBER WRITING TEST — CYBER STIFFENER / DEEP TANK signature.
+   Presentation-only; do not style/transform the handwriting canvas or the
+   functional floating game-tile hit targets. All dark skin is screen-only. */
+.cy-neon-title,.cy-writing-watermark{display:none}
+#cyberSwitch{height:46px;min-height:46px;align-self:center;white-space:nowrap;flex:none;padding:0 10px;
+  border:1px solid #b9c8df;border-radius:12px;background:#eff4fc;color:#304b77;
+  font-size:12px;font-weight:850;letter-spacing:.01em;display:inline-flex;align-items:center;justify-content:center;gap:5px}
+#cyberSwitch:focus-visible{outline:2px solid #3362cf;outline-offset:2px}
+#cyberSwitch .cy-switch-symbol{font-size:13px}
+@media(max-width:760px){.headerRight{column-gap:7px;row-gap:7px}#cyberSwitch{padding:0 9px}}
+@media(max-width:470px){header{position:relative}#cyberSwitch{position:absolute;top:0;right:0;height:42px;min-height:42px;padding:0 8px;font-size:11px}}
+@media screen{
+body.cyber{
+ --ink:#edf7ff;--muted:#a5b8db;--line:#24385b;--blue:#00e8ff;
+ --blue2:#0a2337;--bg:#03050d;--white:#080d1b;--green:#35ff9a;--greenbg:#071d1b;
+ --amber:#ffe600;--amberbg:#241b09;--shadow:0 7px 23px rgba(0,0,0,.38);
+ --cy-c:#00e8ff;--cy-m:#ff2bd1;--cy-g:#35ff9a;--cy-y:#ffe600;
+ color-scheme:dark;color:#eaf4ff;overflow-x:clip;
+ background:radial-gradient(ellipse at 15% 2%,rgba(0,232,255,.09),transparent 42%),
+ radial-gradient(ellipse at 91% 82%,rgba(255,43,209,.07),transparent 56%),
+ linear-gradient(rgba(0,232,255,.023) 1px,transparent 1px) 0 0/30px 30px,
+ linear-gradient(90deg,rgba(0,232,255,.023) 1px,transparent 1px) 0 0/30px 30px,#03050d;
+}
+html:has(body.cyber){background:#03050d;overflow-x:clip}
+body.cyber>.wrap{position:relative;z-index:1}
+/* Watermark behind the existing cards, never in paper/output/handwriting. */
+body.cyber .cy-writing-watermark{
+ display:flex;position:fixed;top:47%;left:50%;transform:translate(-50%,-50%);
+ width:min(79vw,850px);max-width:calc(100vw - 20px);
+ z-index:0;pointer-events:none;user-select:none;flex-direction:column;align-items:center;
+ opacity:.30;overflow:visible;
+}
+body.cyber.cy-study-focus .cy-writing-watermark{opacity:.06}
+body.cyber .cy-writing-logo{width:100%}
+body.cyber .cy-writing-logo svg,body.cyber .cy-writing-logo img{display:block;width:100%;height:auto;overflow:visible}
+body.cyber .cy-writing-caption{font-size:clamp(8px,1vw,12px);letter-spacing:.30em;text-align:center;color:#c7faff;
+ text-shadow:0 0 7px rgba(0,232,255,.52);white-space:nowrap;margin-top:0}
+body.cyber header{border-bottom:1px solid rgba(0,232,255,.18);padding-bottom:8px}
+body.cyber .logo{background:#061321;color:#effcff;border:1px solid #2b5272;border-radius:12px;
+ box-shadow:0 0 10px rgba(0,232,255,.22),inset 0 0 10px rgba(0,232,255,.10);
+ filter:none}
+body.cyber .cy-original-title{display:none}
+body.cyber .cy-neon-title{display:inline;color:#fff;font-size:clamp(13px,1.82vw,19px);font-weight:950;letter-spacing:.08em;white-space:nowrap;
+ text-shadow:0 0 2px #fff,0 0 7px rgba(255,255,255,.88),0 0 13px rgba(0,232,255,.93),-1px 0 rgba(0,232,255,.8),1px 0 rgba(255,43,209,.6)}
+body.cyber .cy-neon-title small{font-size:.60em;letter-spacing:0;color:#ffd4f7;text-shadow:0 0 8px #ff2bd1}
+body.cyber .cy-neon-title .cy-bad{display:inline-block;animation:cyWritingY 7.6s steps(1,end) infinite}
+@keyframes cyWritingY{0%,22%,24%,25%,49%,52%,79%,82%,100%{opacity:1}23%,50%,80%{opacity:.12}23.6%,50.7%,81%{opacity:.77}}
+body.cyber .brand p{color:#91a9c8}
+body.cyber :is(.card,.hero,.ocrHeader,.importEditor,.uiFold,.homeGuide,.paperBanner,.paperGradeItem,.result,
+ .mini,.notice,.tipCard,.importPreview,.sourceReview,.originalSource,.handBatchBar,.ocrWorking,.ocrReviewItem,
+ .ocrRetryTools,.auditStatus,.gameFeedback,.gameMistakes div,.gameSlots,.gamePool,.gameSlot,.ocrWorking,
+ .work,#parentView .card){
+ background-color:rgba(7,12,26,.91);color:#e9f3ff;border-color:#243c62;
+}
+body.cyber .card{
+ background-image:linear-gradient(rgba(0,232,255,.015) 1px,transparent 1px),
+ linear-gradient(90deg,rgba(0,232,255,.011) 1px,transparent 1px);
+ background-size:40px 40px;
+ box-shadow:0 9px 24px rgba(0,0,0,.38),inset 0 0 16px rgba(0,232,255,.012);
+ position:relative;
+}
+body.cyber .card::before,body.cyber .card::after{content:"";position:absolute;width:17px;height:17px;pointer-events:none}
+body.cyber .card::before{left:-1px;top:-1px;border-left:2px solid var(--cy-c);border-top:2px solid var(--cy-c);
+ filter:drop-shadow(0 0 4px rgba(0,232,255,.6))}
+body.cyber .card::after{right:-1px;bottom:-1px;border-right:2px solid var(--cy-m);border-bottom:2px solid var(--cy-m);
+ filter:drop-shadow(0 0 4px rgba(255,43,209,.4))}
+body.cyber .card:focus-within{border-color:#3a6487}
+body.cyber .sectionTitle,body.cyber .gameGroupTitle,body.cyber h2,body.cyber h3{color:#ecf9ff;text-shadow:0 0 8px rgba(0,232,255,.16)}
+body.cyber :is(.muted,.small.muted,.feature,.mini span,.fileFootnote,.gameAssist,.prompt p,
+ .gameTitle p,.statusText,footer,.ocrSmall,.gameFillCount){color:#9cafd0}
+body.cyber .feature{border-bottom-color:#1d304d}
+body.cyber .hr{border-top-color:#273c5f}
+body.cyber .pill,body.cyber .topicChip{background:#082638;border:1px solid #29739a;color:#a6f4ff;text-shadow:0 0 7px rgba(0,232,255,.16)}
+body.cyber .gameTitle h2,body.cyber .statline b{color:#e9faff}
+body.cyber .mini{background:rgba(9,18,34,.92);border:1px solid #1e3654}
+body.cyber .mini b,body.cyber .summaryTop .score{color:#76faff;text-shadow:0 0 11px rgba(0,232,255,.35)}
+body.cyber .listitem{background:#07111e;border-color:#2b4368}
+body.cyber .correctAnswer{background:#071b18;border-left-color:#35ff9a;color:#e8fff8}
+body.cyber .compare .bad{background:#3b1820;color:#ffaeac;text-decoration-color:#ff8787}
+body.cyber .compare .space{background:#33200d;color:#ffdb91}
+body.cyber .feedback{background:#09213b;color:#b8d6ff}
+body.cyber .feedback.good,body.cyber .gameFeedback.good{background:#0a2a20;color:#9fffd9;border-color:#21654b}
+body.cyber .feedback.again{background:#33220b;color:#ffdd9a}
+body.cyber .hint,body.cyber .tipCard,body.cyber .callout{background:#231e0f;border-color:#6d531f;color:#ffe4a4}
+body.cyber .tipHeading{color:#ffe59d}
+body.cyber .paperBanner{background:#201a0e;border-color:#715320}
+body.cyber .paperGradeActions button.selectedGood,body.cyber .ocrReviewItem button.selectedGood{background:#0b3626;color:#b4ffde;border-color:#31b47e}
+body.cyber .paperGradeActions button.selectedBad,body.cyber .ocrReviewItem button.selectedBad{background:#3a1f10;color:#ffd1a0;border-color:#c7833c}
+body.cyber .paperGradeItem details{background:#101723;color:#dceaff}
+body.cyber .errorSpecific{background:#34220f;border-color:#80592d;color:#fce0ac}
+body.cyber .auditStatus.ok{background:#0a291f;border-color:#236348}
+body.cyber .sourceReview{background:#071321}
+body.cyber .homeGuide>summary,body.cyber .uiFold>summary,body.cyber .sourceReview>summary,
+body.cyber .paperGradeItem details>summary{color:#daf5ff;text-shadow:0 0 7px rgba(0,232,255,.16)}
+body.cyber .homeGuide>summary:hover,body.cyber .uiFold>summary:hover{color:#fff}
+body.cyber .importEditor label{color:#d6ebff}
+body.cyber .importCount,body.cyber .ocrReviewItem .judgeStatus{color:#94e9ff}
+body.cyber .paperGradeItem .correctAnswer{background:#071b18;color:#e8fff8}
+body.cyber .originalSource{background:#060d19;color:#c5ddf2}
+body.cyber .ocrReviewItem img{background:#fff!important;filter:none!important} /* OCR originals remain color-accurate */
+body.cyber iframe#pdfSourceFrame{background:#fff!important;filter:none!important}
+body.cyber :is(.field,.select,.answerText,.manageText,textarea,select,input[type=text],input[type=password]){
+ background:#050b17;color:#edf9ff;border-color:#2b466e;outline-color:var(--cy-c)}
+body.cyber :is(.field,.select,textarea,select,input[type=text],input[type=password]):focus-visible{
+ outline:1px solid var(--cy-c);box-shadow:0 0 0 1px var(--cy-c),0 0 11px rgba(0,232,255,.17)}
+body.cyber select option{background:#071321;color:#f4faff}
+body.cyber input[type=checkbox]{accent-color:var(--cy-c)}
+body.cyber .ocrCompact .ocrSwitch{background:#081323;border-color:#274567;color:#d5eaff}
+body.cyber .ocrCompact .ocrSwitch:has(input:checked){background:#082b24;border-color:#35ff9a;color:#c5ffe7;
+ box-shadow:0 0 11px rgba(53,255,154,.19)}
+body.cyber .tabnav,.tabnav:has(button:focus-visible){border-color:#283e64}
+body.cyber .tabnav{background:#070e1c}
+body.cyber .tabnav button{--cy-neon:#00e8ff;color:#a9c1df;background:#050b18;border:1px solid #26415b;
+ text-shadow:0 0 8px rgba(0,232,255,.13);position:relative}
+body.cyber .tabnav button.active{background:linear-gradient(180deg,rgba(0,232,255,.21),rgba(0,232,255,.08));
+ border-color:#00e8ff;color:#f4ffff;box-shadow:0 0 12px rgba(0,232,255,.42),inset 0 0 12px rgba(0,232,255,.12);
+ text-shadow:0 0 8px rgba(0,232,255,.55)}
+body.cyber .tabnav button:nth-child(2){--cy-neon:#ff2bd1}
+body.cyber .tabnav button:nth-child(3){--cy-neon:#ffe600}
+body.cyber .tabnav button:nth-child(2).active{background:linear-gradient(180deg,rgba(255,43,209,.22),rgba(255,43,209,.07));border-color:#ff2bd1;
+ box-shadow:0 0 12px rgba(255,43,209,.37),inset 0 0 11px rgba(255,43,209,.12);text-shadow:0 0 8px rgba(255,43,209,.6)}
+body.cyber .tabnav button:nth-child(3).active{background:linear-gradient(180deg,rgba(255,230,0,.20),rgba(255,230,0,.05));border-color:#ffe600;
+ box-shadow:0 0 12px rgba(255,230,0,.29),inset 0 0 11px rgba(255,230,0,.13);text-shadow:0 0 8px rgba(255,230,0,.38)}
+body.cyber #cyberSwitch{--cy-neon:#ff2bd1;background:#080b1a;color:#f7f6ff;border-color:#ff2bd1;
+ box-shadow:0 0 11px rgba(255,43,209,.27),inset 0 0 9px rgba(255,43,209,.09);
+ text-shadow:0 0 6px rgba(255,43,209,.45)}
+/* Neon tubes / special effects explicitly limited to real action buttons.
+   Never attach to .gameTile/.gameSlot, handwriting canvas, question spans. */
+body.cyber .btn,body.cyber .toggle button,body.cyber .paperTypeChoose button{
+ --cy-neon:#00e8ff;position:relative;color:#eafaff;
+ background:linear-gradient(180deg,color-mix(in srgb,var(--cy-neon) 15%,#0c1425),#060b17 84%);
+ border-color:color-mix(in srgb,var(--cy-neon) 72%,#152542);
+ outline:1px solid color-mix(in srgb,var(--cy-neon) 42%,transparent);outline-offset:-1px;
+ box-shadow:0 0 11px color-mix(in srgb,var(--cy-neon) 24%,transparent),inset 0 0 8px color-mix(in srgb,var(--cy-neon) 9%,transparent);
+ text-shadow:0 0 7px color-mix(in srgb,var(--cy-neon) 26%,transparent)}
+body.cyber .btn.primary{--cy-neon:#00e8ff}
+body.cyber .btn.success{--cy-neon:#35ff9a}
+body.cyber .btn.warn{--cy-neon:#ffe600}
+body.cyber .btn.secondary{--cy-neon:#ff2bd1}
+body.cyber #startBtn,body.cyber #handBatchNext,body.cyber #paperNext{--cy-neon:#35ff9a}
+body.cyber #gameStartBtn,body.cyber #gameReplay{--cy-neon:#ff2bd1}
+body.cyber #gameCheck,body.cyber #checkBtn,body.cyber #saveImport{--cy-neon:#ffe600}
+body.cyber #gameNext,body.cyber #handOcrSave{--cy-neon:#35ff9a}
+body.cyber #importBtn,body.cyber #backupBtn{--cy-neon:#00e8ff}
+body.cyber #restoreBtn{--cy-neon:#ffe600}
+body.cyber .btn:hover:not(:disabled),body.cyber .paperTypeChoose button:hover:not(:disabled){
+ background:linear-gradient(180deg,color-mix(in srgb,var(--cy-neon) 24%,#11192b),#070a14)}
+body.cyber .btn:is(.active,.activePaper,.selectedGood,.selectedBad,.cy-hot),
+body.cyber .toggle button.active,body.cyber .paperTypeChoose button.activePaper,
+body.cyber .btn:is(.primary,.success,.gameStart){
+ background:linear-gradient(180deg,color-mix(in srgb,var(--cy-neon) 29%,#0c1624),color-mix(in srgb,var(--cy-neon) 10%,#030811));
+ border-color:var(--cy-neon);
+ box-shadow:0 0 3px var(--cy-neon),0 0 14px color-mix(in srgb,var(--cy-neon) 43%,transparent),
+ inset 0 0 12px color-mix(in srgb,var(--cy-neon) 16%,transparent);
+ text-shadow:0 0 1px #fff,0 0 9px color-mix(in srgb,var(--cy-neon) 48%,transparent)}
+body.cyber :is(.btn,.toggle button,.paperTypeChoose button,#cyberSwitch)::before{
+ content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;
+ border:1px solid var(--cy-neon,#00e8ff);
+ box-shadow:0 0 4px var(--cy-neon,#00e8ff),0 0 9px color-mix(in srgb,var(--cy-neon,#00e8ff) 47%,transparent),
+ inset 0 0 7px color-mix(in srgb,var(--cy-neon,#00e8ff) 17%,transparent);
+ opacity:.88;animation:var(--cy-fl,cyWrFlickA) var(--cy-t,10s) steps(1,end) var(--cy-d,0s) infinite;
+}
+body.cyber :is(.btn,.toggle button,.paperTypeChoose button,#cyberSwitch):disabled::before{animation:none;opacity:.20}
+body.cyber :is(.btn,.toggle button,.paperTypeChoose button,#cyberSwitch):disabled{filter:none;box-shadow:none}
+body.cyber .btn:nth-of-type(3n+1){--cy-t:9.4s;--cy-d:-1.9s;--cy-fl:cyWrFlickA}
+body.cyber .btn:nth-of-type(3n+2){--cy-t:11.3s;--cy-d:-3.7s;--cy-fl:cyWrFlickB}
+body.cyber .btn:nth-of-type(3n){--cy-t:12.7s;--cy-d:-5.2s;--cy-fl:cyWrFlickC}
+body.cyber #cyberSwitch{--cy-t:10.4s;--cy-d:-4.6s;--cy-fl:cyWrFlickB}
+@keyframes cyWrFlickA{0%,31%,33%,58%,61%,100%{opacity:.85}32%,59%{opacity:.27}32.7%,59.9%{opacity:1}}
+@keyframes cyWrFlickB{0%,22%,25%,72%,75%,100%{opacity:1}23%,73%{opacity:.25}24%,74%{opacity:.87}}
+@keyframes cyWrFlickC{0%,41%,44%,85%,88%,100%{opacity:.85}42%,86%{opacity:.19}43%,87%{opacity:.95}}
+body.cyber .toggle{background:#091525;border:1px solid #263c5c}
+body.cyber .gameStart{border-color:#ff2bd1;color:#fff}
+/* Game: preserve drifting hit targets and animations. Theme faces only. */
+body.cyber .gamePool{background:radial-gradient(circle at 18% 27%,rgba(255,43,209,.08),transparent 49%),
+ radial-gradient(circle at 80% 65%,rgba(0,232,255,.06),transparent 50%),#060e1d}
+body.cyber .gameSlot{background:#071526;border-color:#2b5482;color:#c8efff}
+body.cyber .gameSlot.gameCursor:not(.filled){background:#102d40;border-color:#00e8ff;box-shadow:inset 0 0 8px rgba(0,232,255,.19)}
+body.cyber .gameSlot.filled{background:#0c2636;color:#f2ffff;border-color:#00e8ff}
+body.cyber .gameSlot.spaceFilled{background:#132918;border-color:#35ff9a;color:transparent}
+body.cyber .gameTileFace{background:#07172a;color:#eafaff;border-color:#2d5d81;
+ box-shadow:0 4px 0 #152846,0 5px 13px rgba(0,232,255,.09)}
+
+body.cyber .gameTile.spaceTile .gameTileFace{background:#09231e;border-color:#3a9c83;color:#b5ffe5}
+body.cyber .gameTile.dragging .gameTileFace{box-shadow:0 9px 17px rgba(0,232,255,.29)}
+body.cyber #gameScore{background:#082a21;color:#a0ffdd}
+body.cyber .gameFeedback{background:#1d190f;border-color:#7d5f25;color:#ffe1a3}
+body.cyber .gameWinText{background:#1f1707;color:#ffeac1;border-color:#ffe600;box-shadow:0 0 18px rgba(255,230,0,.36)}
+body.cyber .progress{background:#0a1830}
+body.cyber .progress>div{background:linear-gradient(90deg,#00e8ff,#35ff9a);box-shadow:0 0 8px rgba(0,232,255,.65)}
+/* Keep the user's handwriting notebook white and coordinates unchanged. */
+body.cyber :is(.paper,.paper.gridPaper,.paper.linePaper,#ink){filter:none!important}
+body.cyber .paper{border-color:#2b6e91;box-shadow:0 0 11px rgba(0,232,255,.16)}
+body.cyber .paper.gridPaper{background-color:#fff;background-image:linear-gradient(to right,#d9e6f5 1px,transparent 1px),linear-gradient(to bottom,#d9e6f5 1px,transparent 1px)}

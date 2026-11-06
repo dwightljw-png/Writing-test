@@ -1,0 +1,200 @@
+function advance(){stopSpeech();session.at++;if(session.at>=session.items.length){showSummary();return}showQuestion()}
+
+function paperNext(){if(!session||inputMode!=='paper')return;stopSpeech();if(session.at<session.items.length-1){session.at++;showQuestion()}else showPaperGrade()}
+function paperPrevious(){if(!session||inputMode!=='paper'||session.at<1)return;session.at--;showQuestion()}
+let paperMarks=[];
+function showPaperGrade(){stopSpeech();$('previewArea').classList.add('hidden');$('writeArea').classList.add('hidden');$('paperGradeArea').classList.remove('hidden');$('progressFill').style.width='100%';$('progressDetail').textContent='공책을 펼치고 모든 답을 대조하세요';$('studyModeBadge').textContent='📓 공책 시험 · 일괄 채점';paperMarks=Array(session.items.length).fill(null);renderPaperGrade()}
+function renderPaperGrade(){let root=$('paperGradeList');root.replaceChildren();session.items.forEach((it,i)=>{let div=document.createElement('div');div.className='paperGradeItem';let heading=document.createElement('b');heading.textContent=(i+1)+'번 정답';let ans=document.createElement('div');ans.className='correctAnswer';ans.textContent=it[0];div.append(heading,ans);
+let tips=learnTips(it[0],it[1]||'');if(tips.length){let det=document.createElement('details');let title=document.createElement('summary');title.textContent='💡 왜 이렇게 쓸까요? 맞춤법 팁 ('+tips.length+')';det.append(title);for(let tip of tips){let p=document.createElement('p');p.textContent=tip.tag+' — '+tip.tip;let audio=document.createElement('button');audio.type='button';audio.className='btn soft tipAudio';audio.textContent='🔊 팁 읽어 주기';audio.addEventListener('click',()=>speak(tip.tip));det.append(p,audio)}div.append(det)}
+let note=document.createElement('input');note.type='text';note.className='field paperErrorEntry hidden';note.placeholder='실제로 틀리게 쓴 글자·문장 (선택)';note.autocomplete='off';note.spellcheck=false;let noteTips=document.createElement('div');noteTips.className='hidden';note.addEventListener('input',()=>{noteTips.classList.toggle('hidden',!note.value.trim());if(note.value.trim())renderMistakeTips(noteTips,it[0],it[1]||'',note.value)});let group=document.createElement('div');group.className='paperGradeActions';for(let opt of [{ok:true,text:'⭕ 공책에 맞게 썼어요'},{ok:false,text:'❌ 틀렸거나 못 썼어요'}]){let btn=document.createElement('button');btn.type='button';btn.className='btn soft';btn.textContent=opt.text;btn.setAttribute('aria-pressed','false');btn.addEventListener('click',()=>{paperMarks[i]=opt.ok;note.classList.toggle('hidden',opt.ok);noteTips.classList.toggle('hidden',opt.ok||!note.value.trim());if(!opt.ok&&note.value.trim())renderMistakeTips(noteTips,it[0],it[1]||'',note.value);for(let b of group.querySelectorAll('button')){b.classList.remove('selectedGood','selectedBad');b.setAttribute('aria-pressed','false')}btn.classList.add(opt.ok?'selectedGood':'selectedBad');btn.setAttribute('aria-pressed','true');updatePaperGradeProgress()});group.append(btn)}div.append(group,note,noteTips);note.dataset.paperIndex=i;root.append(div)});updatePaperGradeProgress()}
+function updatePaperGradeProgress(){let n=paperMarks.filter(x=>x!==null).length;$('paperGradeProgress').textContent=n+' / '+paperMarks.length+'문제 채점 완료 · '+(paperMarks.length-n)+'문제 남음';$('paperGradeSave').disabled=n!==paperMarks.length}
+function savePaperGrade(){if(!session||inputMode!=='paper'||paperMarks.some(x=>x===null))return;stopSpeech();if(!session.retryMode){for(let i=0;i<session.items.length;i++){session.at=i;session.recorded=false;markResult(paperMarks[i],paperMarks[i]===false?$('paperGradeList').querySelector('input[data-paper-index="'+i+'"]')?.value.trim()||null:null,'writing')}}$('paperGradeArea').classList.add('hidden');session.at=session.items.length-1;showSummary()}
+function releaseHandReview(){ $('handOcrReviewList').replaceChildren();if(session){session.handImages=[];session.handDrafts=[];session.handGridMeta=[];session.handLayouts=[];session.handOCR=[];}strokes=[];currentStroke=null;}
+function showSummary(){releaseHandReview();$('handOcrReview').classList.add('hidden');$('handOcrWorking').classList.add('hidden');$('progressFill').style.width='100%';$('previewArea').classList.add('hidden');$('writeArea').classList.add('hidden');$('summaryArea').classList.remove('hidden');let total=session.results.length,good=session.results.filter(Boolean).length,wrong=session.mistakes.length;$('summaryScore').textContent=total?Math.round(good/total*100)+'%':'–';$('summaryLabel').textContent=session.retryMode?'오답도 다시 써 봤어요. 내일 확인하면 더 오래 기억할 수 있어요.':'처음 풀었을 때의 정답률이에요. 점수보다 꾸준한 연습이 중요해요.';$('sumTotal').textContent=total;$('sumGood').textContent=good;$('sumWrong').textContent=wrong;$('wrongList').replaceChildren();if(wrong){let h=document.createElement('h3');h.textContent='🌱 복습할 문장';$('wrongList').append(h);for(const item of session.mistakes){let row=document.createElement('div');row.className='listitem';row.textContent=item[0];$('wrongList').append(row)}}$('retryWrong').classList.toggle('hidden',!wrong||session.retryMode)}
+function beginRetry(){session.items=session.mistakes.slice();session.handDrafts=session.items.map(()=>[]);session.handGridMeta=session.items.map(()=>null);session.handLayouts=[];session.handOCR=[];session.handMarks=[];session.handManualEdited=session.items.map(()=>false);session.at=0;session.retryMode=true;session.recorded=false;$('summaryArea').classList.add('hidden');$('paperGradeArea').classList.add('hidden');showQuestion()}
+function quit(){stopSpeech();if(ocrController){ocrController.abort();ocrController=null}ocrBusy=false;releaseHandReview();session=null;$('studyArea').classList.add('hidden');$('setupArea').classList.remove('hidden');refreshHome()}
+function renderRecord(){const hs=db.history.filter(x=>x.profile===db.profile&&!x.retry),correct=hs.filter(x=>x.ok).length;$('recordTotal').textContent=hs.length;$('recordRate').textContent=hs.length?Math.round(100*correct/hs.length)+'%':'-';let allDue=[];const stats=activeStats(),now=localDay();for(let [bank,entries] of Object.entries({...EXAMPLES,custom:db.custom})){
+  for(let item of entries){let s=stats[itemKey(item,bank,'manual')];if(s&&s.due<=now)allDue.push({item,bank,s})}
+ }
+ // Each imported pack has its own schedule, including when sentences repeat.
+ for(const pack of db.packs){for(const item of pack.items){
+  const st=stats[itemKey(item,'custom',pack.id)];
+  if(st&&st.due<=now)allDue.push({item,bank:'custom',s:st});
+ }}$('recordDue').textContent=allDue.length;let byDay={};for(const x of hs){if(!byDay[x.day])byDay[x.day]=[0,0];byDay[x.day][0]++;if(x.ok)byDay[x.day][1]++}let el=$('dayHistory');el.replaceChildren();let days=Object.keys(byDay).sort().reverse().slice(0,14);if(!days.length)el.textContent='아직 학습 기록이 없어요.';for(let day of days){let [n,c]=byDay[day],r=document.createElement('div');r.className='listitem';r.textContent=day+' · '+n+'문제 중 '+c+'문제 정답';el.append(r)}renderWeaknessRecord();let due=$('dueHistory');due.replaceChildren();if(!allDue.length)due.textContent='오늘 복습할 문장이 없어요.';for(let {item,bank,s} of allDue.slice(0,40)){let r=document.createElement('div');r.className='listitem';let left=document.createElement('span');left.className='sentence';left.textContent=item[0];let right=document.createElement('span');right.className='statusText';right.textContent=s.lastResult==='wrong'?'오답 복습':'기억 확인';r.append(left,right);due.append(r)}}
+function renderParent(){renderPackOptions();$('customText').value=db.custom.map(x=>x[0]+(x[1]?' | '+x[1]:'')).join('\n');refreshVoiceChoices();$('voiceRate').value=Math.max(.8,Math.min(1.15,Number(db.settings.rate)||.95));$('voiceRateText').textContent=$('voiceRate').value+'배';$('punctuation').checked=!!db.settings.punctuation;setStatus('')}
+function saveCustom(){let lines=$('customText').value.split(/\r?\n/),out=[];let seen=new Set();for(let line of lines){line=line.trim();if(!line)continue;let idx=line.indexOf('|'),sentence=(idx>=0?line.slice(0,idx):line).trim(),hint=(idx>=0?line.slice(idx+1):'').trim();if(!sentence||seen.has(sentence))continue;seen.add(sentence);out.push([sentence,hint])}db.custom=out;db.settings.bank='custom';db.settings.pack='manual';persist();renderPackOptions();setStatus('✅ 문장 '+out.length+'개를 저장했습니다.');refreshHome()}
+function download(name,body){let url=URL.createObjectURL(new Blob([body],{type:'application/json;charset=utf-8'}));let a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
+function restoreFile(f){if(!f)return;let r=new FileReader();r.onload=()=>{try{let value=JSON.parse(r.result);if(!value||!Array.isArray(value.profiles)||!value.profiles.length||!value.settings||!Array.isArray(value.custom)||!Array.isArray(value.history)||!value.stats||typeof value.stats!=='object')throw Error('파일 형식이 올바르지 않습니다.');if(!confirm('현재 학습 기록을 백업 파일로 교체할까요?'))return;db={...defaults(),...value,packs:Array.isArray(value.packs)?value.packs:[],settings:{...defaults().settings,...value.settings}};if(!db.profiles.includes(db.profile))db.profile=db.profiles[0];migratePackProgress();persist();updateProfiles();renderParent();refreshHome();setStatus('✅ 백업을 복원했습니다.')}catch(e){alert('백업을 복원하지 못했습니다: '+e.message)}};r.readAsText(f)}
+
+function renderPackOptions(){
+ let selector=$('pack'),old=db.settings.pack||'manual';selector.replaceChildren();let mk=(value,txt)=>{let o=document.createElement('option');o.value=value;o.textContent=txt;selector.append(o)};
+ mk('manual','직접 등록한 학교 문장 ('+db.custom.length+'문제)');for(const p of db.packs)mk(p.id,p.name+' ('+p.items.length+'문제)');selector.value=old;if(!selector.value){selector.value='manual';db.settings.pack='manual'}$('packRow').classList.toggle('hidden',db.settings.bank!=='custom');
+ let manager=$('packManage');manager.replaceChildren();for(const p of db.packs){let o=document.createElement('option');o.value=p.id;o.textContent=p.name+' ('+p.items.length+'문제)';manager.append(o)}$('deletePack').disabled=!db.packs.length;
+}
+
+function tidyText(s){return String(s??'').replace(/\uFEFF/g,'').replace(/\u00a0/g,' ').replace(/[\t ]+/g,' ').trim()}
+const NUMBER_MARK=/^(?:(?:문제|문항|번호)\s*)?(?:\(\s*(\d{1,4})\s*\)|(?<!\d)(\d{1,4})\s*(?:[.)．、:]|번(?:째)?\s*[.:：]?)|([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳])\s*)\s*/;
+function rawQuestion(line){let t=tidyText(line);if(!t)return {text:'',index:null};let m=t.match(NUMBER_MARK);if(m){let n=Number(m[1]||m[2]||'0');return {text:t.slice(m[0].length).trim(),index:n||null}}return {text:t,index:null}}
+function parseGroupTitle(line){
+ const t=tidyText(line).replace(/^#{1,4}\s*/,''),m=t.match(/^(?:[<〈\[【(]\s*)?(?:\d+\s*학기\s*)?(?:제\s*)?(\d{1,4})\s*(급수|등급|급|단계|단원|단|장|과|차시|회차|차|회|주차|주|교시|일차|편)(?:\s*[>〉\]】)])?(?:\s*[.．:：\-–]\s*|\s+|$)(.*)$/);
+ if(m)return {label:m[1]+m[2],title:tidyText(m[3])};
+ let m2=t.match(/^(?:(LEVEL|STEP|UNIT|CHAPTER|LESSON|DAY|WEEK)\s*([A-Z0-9]{1,5})|(?:급수|단계|단원|회차|주차)\s*[:：]?\s*([0-9]{1,4}))(?:\s*[-:：.]\s*|\s+|$)(.*)$/i);
+ if(m2)return {label:m2[1]?m2[1].toUpperCase()+' '+m2[2]:'묶음 '+m2[3],title:tidyText(m2[4])};
+ let rev=t.match(/^(종합평가|총정리|복습문제|받아쓰기\s*시험|연습문제|단원평가|실력평가)(?:\s*[-:：]\s*(.*))?$/);
+ if(rev)return {label:rev[1],title:tidyText(rev[2]||'')};
+ return null;
+}
+function isDocumentDecoration(s){return /^(?:\s*(?:[가-힣\s]{0,14}(?:초등학교|학교)\s*)?(?:(?:\d+학년|\d+반|\d+번|이름|성명|날짜|학번|번호)\s*[:：]?\s*[()\s·]*){1,4}|(?:초등학교\s*)?\d+학년\s*받아쓰기(?:\s*(?:급수표|학습지|문제집))?|받아쓰기\s*(?:급수표|학습지|연습지|문제집|연습)|\d+\s*페이지|페이지\s*\d+|학습목표\s*[:：].*)$/i.test(s)}
+function linesToGroups(str,name){
+ let groups=[],current={name,items:[]},previousNumber=null,autoPart=1;
+ const looseRows=String(str??'').split(/\r?\n/).map(x=>tidyText(x).match(/^(\d{1,4})\s+([^\d].+)$/)).filter(Boolean);
+ const looseMode=looseRows.length>=2 && looseRows.some(x=>Number(x[1])===1) && looseRows.some(x=>Number(x[1])===2);
+ const push=()=>{if(current.items.length)groups.push(current)};
+ for(const sourceLine of String(str??'').split(/\r?\n/)){
+   let line=tidyText(sourceLine);if(!line||(isDocumentDecoration(line)&&!/^(?:이름|번호|날짜|학번|성명)$/.test(line))||(line.includes('|')&&/^(?:번호|순서|정답|문제|문장|낱말|쓰기|맞춤법|학습\s*포인트|해설)(?:\s*[|,\t]\s*(?:문장|내용|정답|문제|해설|설명|학습\s*포인트))*$/i.test(line)))continue;
+   const heading=parseGroupTitle(line);
+   if(heading){push();current={name:name+' · '+heading.label+(heading.title?' '+heading.title:''),items:[]};previousNumber=null;continue}
+   let m=rawQuestion(line);
+   if(m.index===null&&looseMode){let n=line.match(/^(\d{1,4})\s+([^\d].+)$/);if(n)m={index:Number(n[1]),text:n[2]}}
+   line=m.text;
+   if(!line||/^\d{1,4}$/.test(line))continue;
+   if(m.index!==null&&previousNumber!==null&&m.index===1&&previousNumber>1&&current.items.length){push();autoPart++;current={name:name+' · 묶음 '+autoPart,items:[]}}
+   if(m.index!==null)previousNumber=m.index;
+   let ix=line.indexOf(' | ');let sentence=tidyText(ix>=0?line.slice(0,ix):line),tip=tidyText(ix>=0?line.slice(ix+3):'');
+   if(sentence&&sentence.length<=1000)current.items.push([sentence,tip]);
+ }
+ push();return groups;
+}
+function xmlElements(root,name){return [...root.getElementsByTagName('*')].filter(n=>n.localName===name)}
+function directChildren(root,name){return [...root.childNodes].filter(n=>n.nodeType===1&&(!name||n.localName===name))}
+function getParagraphText(node){return xmlElements(node,'t').map(n=>n.textContent).join('')}
+function tableRows(node){return xmlElements(node,'tr').map(tr=>directChildren(tr).filter(x=>x.localName==='tc').map(tc=>xmlElements(tc,'p').map(p=>getParagraphText(p)).filter(Boolean).join(' ')))}
+function isNumCell(x){return /^\s*(?:\d{1,4}|[①②③④⑤⑥⑦⑧⑨⑩])\s*[.)．:]?\s*$/.test(x)}
+function isHintCell(x){return /^(해설|설명|힌트|팁|학습\s*포인트|학습내용|주의점)$/i.test(tidyText(x))}
+function isQuestionHeader(x){return /^(문장|정답|낱말|받아쓰기|받아쓰기\s*문장|문제\s*내용|쓰기)$/i.test(tidyText(x))}
+function rowsToSources(rows,name){
+ const R=rows.map(r=>r.map(x=>tidyText(x)));if(!R.length)return [];
+ const w=Math.max(...R.map(r=>r.length));let numericColumns=[];
+ for(let c=0;c<w-1;c++){let nums=0,valid=0;for(const r of R){if(isNumCell(r[c]||'')&&r[c+1]&&!isNumCell(r[c+1])){nums++;}if(r[c])valid++}if(nums>=2&&nums>=Math.max(2,Math.floor(valid*.35)))numericColumns.push(c)}
+ // Example: two side-by-side sections with [number, sentence, number, sentence].
+ let lanes=[];
+ if(numericColumns.length>=2){lanes=numericColumns.filter((c,i)=>!i||c>=numericColumns[i-1]+2).map(c=>({q:c+1,n:c}));}
+ else if(numericColumns.length===1){lanes=[{q:numericColumns[0]+1,n:numericColumns[0]}]}
+ else {
+   let allText=R.filter(r=>r.filter(Boolean).length>=2).length;
+   const headingRows=R.filter(r=>r.filter(Boolean).length>=2&&r.filter(Boolean).every(v=>parseGroupTitle(v))).length;
+   if(headingRows||allText>=2&&w===2&&!R.some(r=>r.some(isQuestionHeader)||r.some(isHintCell))){lanes=Array.from({length:w},(_,q)=>({q,n:-1}));}
+   else{let q=0;const header=R.find(r=>r.some(isQuestionHeader));if(header){let idx=header.findIndex(isQuestionHeader);if(idx>=0)q=idx;}lanes=[{q,n:-1}]}
+ }
+ const out=[];
+ let auditRows=R.map((r,i)=>(i+1)+'행 | '+r.map((v,c)=>(c+1)+'열: '+v).join(' ｜ ')).join('\n');
+ let structuralIssues=[];
+ if(lanes.length===1&&w>2){let consumed=new Set([lanes[0].q,lanes[0].n].filter(x=>x>=0));let other=Array.from({length:w},(_,i)=>i).filter(c=>!consumed.has(c)&&R.some(r=>r[c]));if(other.length)structuralIssues.push('해석되지 않은 별도 열이 있을 수 있습니다: '+other.map(c=>(c+1)+'열').join(', '));}
+ if(lanes.length>=2)structuralIssues.push('병렬 배치 표를 '+lanes.length+'개 세로 묶음으로 변환했습니다. 열별 문제 순서/제목을 검수하세요.');
+ for(let k=0;k<lanes.length;k++){
+   const lane=lanes[k],lines=[];let lastExtraTitle='';
+   const hintCol=lanes.length===1?(R.find(r=>r.some(isHintCell))||[]).findIndex(isHintCell):-1;
+   for(const r of R){let val=r[lane.q]||'',n=lane.n>=0?r[lane.n]||'':'';
+     if(lanes.length===1){let extra=r.map((v,c)=>(c!==lane.q&&c!==lane.n&&parseGroupTitle(v))?v:'').find(Boolean);if(extra&&extra!==lastExtraTitle){lines.push(extra);lastExtraTitle=extra}}
+     if(!val){if(lane.n>=0&&parseGroupTitle(n))lines.push(n);continue}
+     if(isQuestionHeader(val)||isHintCell(val)||isDocumentDecoration(val))continue;
+     const title=parseGroupTitle(val);if(title)lines.push(val);
+     else if(lane.n>=0&&parseGroupTitle(n))lines.push(n);
+     else lines.push((isNumCell(n)?n.replace(/[.)．:]\s*$/,'')+'. ':'')+(lane.n<0?val.replace(/^(\d{1,3})\s+(?=[가-힣])/, '$1. '):val)+(hintCol>=0&&hintCol!==lane.q&&r[hintCol]&&!isHintCell(r[hintCol])?' | '+r[hintCol]:''));
+   }
+   if(lines.length)out.push({name:name+(lanes.length>1?' · '+(k+1)+'열':''),text:lines.join('\n'),auditOriginal:auditRows,issues:structuralIssues});
+ }
+ return out;
+}
+function parseDocxXml(xml,name){
+ const doc=new DOMParser().parseFromString(xml,'application/xml'),body=xmlElements(doc,'body')[0];
+ if(!body)return [];
+ let sources=[],lines=[];const flush=()=>{if(lines.some(Boolean))sources.push({name,text:lines.join('\n')});lines=[]};
+ for(const elem of directChildren(body)){
+   if(elem.localName==='p')lines.push(getParagraphText(elem));
+   else if(elem.localName==='tbl'){
+     let context=lines.filter(Boolean).slice(-2),rr=tableRows(elem);flush();let fromTable=rowsToSources(rr,name);
+     // Preserve an immediately preceding section heading without mislabeling the table.
+     for(let x of fromTable){if(context.length&&parseGroupTitle(context[context.length-1]))x.text=context[context.length-1]+'\n'+x.text;sources.push(x)}
+   }
+ }
+ flush();return sources;
+}
+async function parseOffice(f,ext){
+ if(typeof JSZip==='undefined')throw Error('문서 압축 해석 모듈을 불러오지 못했어요.');let z=await JSZip.loadAsync(await f.arrayBuffer());let read=async p=>{let x=z.file(p);return x?x.async('string'):''};let fname=f.name.replace(/\.[^.]+$/,'');
+ if(ext==='docx'){let xml=await read('word/document.xml');if(!xml)throw Error('워드 본문을 찾지 못했어요.');return parseDocxXml(xml,fname)}
+ if(ext==='hwpx'){
+   let paths=Object.keys(z.files).filter(x=>/^Contents\/section\d+\.xml$/i.test(x)).sort((a,b)=>Number(a.match(/section(\d+)/i)[1])-Number(b.match(/section(\d+)/i)[1]));if(!paths.length)throw Error('HWPX 본문을 찾지 못했어요.');let sources=[];
+   for(const p of paths){let d=new DOMParser().parseFromString(await read(p),'application/xml');let paras=xmlElements(d,'p').map(x=>getParagraphText(x)).filter(Boolean);sources.push({name:fname,text:paras.join('\n'),issues:['HWPX는 XML 문단을 기준으로 읽었습니다. 표/병렬 배치와 텍스트 순서는 반드시 원문과 비교하세요.']})}
+   return sources;
+ }
+ if(ext==='xlsx'){
+   let shared=await read('xl/sharedStrings.xml'),sharedList=[];if(shared){let d=new DOMParser().parseFromString(shared,'application/xml');sharedList=xmlElements(d,'si').map(n=>xmlElements(n,'t').map(x=>x.textContent).join(''))}
+   let paths=Object.keys(z.files).filter(x=>/^xl\/worksheets\/sheet\d+\.xml$/i.test(x)).sort((a,b)=>Number(a.match(/sheet(\d+)/)[1])-Number(b.match(/sheet(\d+)/)[1]));if(!paths.length)throw Error('엑셀 시트를 찾지 못했어요.');
+   let sheetNames=[];let bookXml=await read('xl/workbook.xml');if(bookXml){let bd=new DOMParser().parseFromString(bookXml,'application/xml');sheetNames=xmlElements(bd,'sheet').map(x=>x.getAttribute('name')||'')}
+   let result=[];
+   for(let k=0;k<paths.length;k++){
+     let d=new DOMParser().parseFromString(await read(paths[k]),'application/xml');let rows=[];
+     for(const row of xmlElements(d,'row')){let vals=[];for(const c of directChildren(row,'c')){
+       let ref=c.getAttribute('r')||'',col=ref.match(/^[A-Z]+/i),idx=0;
+       if(col){for(let ch of col[0].toUpperCase())idx=idx*26+(ch.charCodeAt(0)-64);idx--; }else idx=vals.length;
+       let typ=c.getAttribute('t'),v=xmlElements(c,typ==='inlineStr'?'t':'v').map(x=>x.textContent).join('');if(typ==='s')v=sharedList[Number(v)]||'';vals[idx]=tidyText(v);
+     }if(vals.some(Boolean))rows.push(vals)}
+     result.push(...rowsToSources(rows,fname+' · '+(sheetNames[k]||'시트'+(k+1))));
+   }
+   return result;
+ }
+ throw Error('지원하지 않는 문서입니다.');
+}
+
+function createImportAudit(sources,groups,file){
+ const issues=[],originals=[],maxSample=180;let total=0;
+ if(!sources.length)issues.push('문서에서 분석 가능한 내용이 발견되지 않았습니다.');
+ for(let i=0;i<sources.length;i++){
+  const source=sources[i],text=String(source.text||''),origin=String(source.auditOriginal||text),nonempty=text.split(/\r?\n/).map(tidyText).filter(Boolean);
+  originals.push('■ '+source.name+' · 출처 '+(i+1)+'\n'+origin);
+  if(Array.isArray(source.issues))for(let msg of source.issues)issues.push(source.name+': '+msg);
+  if(source.auditOriginal&&source.auditOriginal!==text)issues.push(source.name+': 표의 칸 배치가 변환되었습니다. 원본 행과 열을 꼭 비교해 주세요.');
+  let seq=null;
+  for(const line of nonempty){
+   if(line.length>1000){issues.push(source.name+': 1000자 초과 행은 인식에서 제외될 수 있습니다.');continue}
+   if(/^\s*(?:[a-zA-Z가-힣]\s*[)．.]\s+|[0-9]{1,3}\s*$)/.test(line))issues.push(source.name+': 번호 또는 목록 구조가 애매한 행이 있습니다: '+line.slice(0,42));
+   if(/^\d{1,4}\s+[^\d\s]/.test(line)&&!/^\d{1,4}[.)．:]/.test(line))issues.push(source.name+': 숫자+공백을 문항 번호로 해석할지 확인하세요: '+line.slice(0,42));
+   if(/\s{6,}|\t/.test(line))issues.push(source.name+': 한 줄에 여러 열이 섞였을 수 있습니다: '+line.slice(0,42));
+   const parsed=rawQuestion(line);if(parsed.index!==null){if(seq!==null&&parsed.index!==seq+1&&parsed.index!==1)issues.push(source.name+': 문제 번호가 '+seq+'에서 '+parsed.index+'(으)로 이동합니다. 누락/순서를 검수해 주세요.');seq=parsed.index}
+   if(/\|/.test(line)&&!line.includes(' | '))issues.push(source.name+': 문장과 팁/열 구분이 모호합니다: '+line.slice(0,42));
+  }
+  total+=nonempty.length;
+ }
+ for(let g of groups){let seen=new Set();for(let item of g.items){if(seen.has(item[0]))issues.push(g.name+': 같은 문장이 여러 번 나옵니다. 원본과 비교해 주세요.');seen.add(item[0]); if(/(?:^|\s)(?:문제|번호|학습목표|정답|해설)\s*[:：]/.test(item[0]))issues.push(g.name+': 제목이나 설명이 문장으로 섞였을 수 있습니다: '+item[0].slice(0,35))} }
+ if(groups.length>maxSample)issues.push('문제 묶음이 매우 많습니다('+groups.length+'개). 전체 순서 및 누락 여부를 꼼꼼히 점검해 주세요.');
+ let seen=new Set(),warnings=issues.filter(x=>!seen.has(x)&&seen.add(x));
+ return {file:file.name,original:originals.join('\n\n'),warnings,sourceCount:sources.length,groupCount:groups.length,lineCount:total};
+}
+function renderImportAudit(){if(!pendingAudit)return;let warn=pendingAudit.warnings||[],node=$('importAuditStatus');node.classList.toggle('ok',!warn.length);node.textContent=(warn.length?'⚠️ 확인해야 할 항목 '+warn.length+'개':'✅ 자동 검사에서 뚜렷한 경고가 발견되지 않았습니다.')+'\n'+(warn.length?warn.map((w,i)=>(i+1)+'. '+w).join('\n'):'문서 구조가 올바르게 읽혔는지는 원문을 직접 대조해야 합니다.');$('importSourceText').textContent=pendingAudit.original||'원본 추출 기록이 없습니다.';}
+function resetImportVerification(){$('importVerify').checked=false;}
+function parseCsvRows(raw,delimiter){let out=[],row=[],field='',quoted=false;for(let i=0;i<raw.length;i++){let ch=raw[i];if(ch==='"'){if(quoted&&raw[i+1]==='"'){field+='"';i++}else quoted=!quoted}else if(ch===delimiter&&!quoted){row.push(field);field=''}else if((ch==='\n'||ch==='\r')&&!quoted){if(ch==='\r'&&raw[i+1]==='\n')i++;row.push(field);out.push(row);row=[];field=''}else field+=ch}if(field||row.length){row.push(field);out.push(row)}return out}
+function refreshImportSummary(){
+ let total=pendingImport.reduce((n,g)=>n+g.items.length,0),sel=$('importGroupSelect'),keep=importEditorIndex;sel.replaceChildren();
+ pendingImport.forEach((g,i)=>{let o=document.createElement('option');o.value=String(i);o.textContent=(i+1)+'. '+g.name+' ('+g.items.length+'문제)';sel.append(o)});if(!pendingImport.length)return;
+ importEditorIndex=Math.min(keep,pendingImport.length-1);sel.value=String(importEditorIndex);
+ $('importPreview').textContent='자동 인식: '+pendingImport.length+'개 묶음 · '+total+'문제\n'+pendingImport.map((g,i)=>(i+1)+'. '+g.name+' — '+g.items.length+'문제').join('\n');
+ $('importEditorStatus').textContent='총 '+pendingImport.length+'묶음 · '+total+'문제. 현재 편집 중: '+pendingImport[importEditorIndex].items.length+'문제 (문제 수 제한 없음)';
+}
+let importEditorIndex=0;
+function syncImportEditor(){if(!pendingImport||!pendingImport.length)return;let g=pendingImport[importEditorIndex];if(!g)return;g.name=tidyText($('importGroupName').value)||'이름 없는 문제 묶음';g.items=$('importGroupText').value.split(/\r?\n/).map(s=>{let ix=s.indexOf(' | ');return [tidyText(ix<0?s:s.slice(0,ix)),tidyText(ix<0?'':s.slice(ix+3))]}).filter(a=>a[0]);}
+function displayImportEditor(index){if(!pendingImport||!pendingImport.length)return;importEditorIndex=Math.max(0,Math.min(index,pendingImport.length-1));let g=pendingImport[importEditorIndex];$('importGroupName').value=g.name;$('importGroupText').value=g.items.map(x=>x[0]+(x[1]?' | '+x[1]:'')).join('\n');refreshImportSummary();}
+function adjustImportGroup(kind){if(!pendingImport)return;resetImportVerification();syncImportEditor();let idx=importEditorIndex,g=pendingImport[idx];if(kind==='add'){pendingImport.splice(idx+1,0,{name:'새 문제 묶음',items:[]});idx++;}
+ else if(kind==='delete'){if(pendingImport.length===1){alert('마지막 묶음은 삭제할 수 없습니다. 문장 목록을 비우거나 파일을 다시 불러오세요.');return}if(!confirm('선택한 묶음과 그 안의 문제를 삭제할까요?'))return;pendingImport.splice(idx,1);idx=Math.min(idx,pendingImport.length-1)}
+ else if(kind==='merge'){if(idx>=pendingImport.length-1){alert('다음 묶음이 없습니다.');return}g.items.push(...pendingImport[idx+1].items);pendingImport.splice(idx+1,1)}
+ else if(kind==='split'){let at=Number(prompt('몇 번째 문제부터 새 묶음으로 나눌까요? (2부터 '+g.items.length+'까지)',String(Math.ceil(g.items.length/2)+1)));if(!Number.isInteger(at)||at<=1||at>g.items.length){alert('2부터 현재 문제 수 이하의 번호를 입력해 주세요.');return}pendingImport.splice(idx+1,0,{name:g.name+' · 이어서',items:g.items.splice(at-1)});idx++}
+ displayImportEditor(idx)}
+// PDF import: preserve page, column and issue metadata; only the user may approve the final answer key.
+const PDFJS_URL='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+let pdfJsReady=null,pdfReviewUrl=null;
+function releasePdfOriginal(){
+ const old=pdfReviewUrl;pdfReviewUrl=null;
+ $('pdfOriginalReview').open=false;
+ $('pdfSourceFrame').removeAttribute('src'); // unload built-in PDF viewer and decoded pages
+ $('pdfSourceLink').removeAttribute('href');

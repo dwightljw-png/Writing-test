@@ -1,0 +1,148 @@
+ cx.globalAlpha=1;if(bolts.length||rings.length||particles.length)raf=requestAnimationFrame(frame);else{raf=0;cx.clearRect(0,0,SIZE,SIZE)}
+}
+let lastSpark=0;
+function spark(el,power=1){if(!CY()||reduced()||D.hidden||!el)return;
+ const r=el.getBoundingClientRect();if(r.width<3||r.height<3)return;
+ const now=performance.now();if(now-lastSpark<115)return;lastSpark=now;
+ const x=r.left+r.width/2,y=r.top+r.height/2;ensure(x,y);bolts=[];rings=[];particles=[];
+ for(let i=0;i<Math.ceil(4*power);i++)bolt(HALF,HALF);
+ for(let i=0;i<Math.ceil(15*power);i++){let a=Math.random()*Math.PI*2,s=1+Math.random()*3;
+  particles.push({x:HALF,y:HALF,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1,c:i%3?'#baffff':'#ffe47c',life:11+Math.random()*3})}
+ rings.push({x:HALF,y:HALF,rad:4,life:9});if(!raf)raf=requestAnimationFrame(frame);
+}
+function snap(el){if(!CY()||reduced()||!el?.animate)return;
+ el.animate([{translate:'0 0'},{translate:'-1.1px .3px'},{translate:'1.2px -.4px'},{translate:'0 0'}],{duration:150,easing:'ease-out'})}
+const loadActions=new Set(['startBtn','gameStartBtn','importBtn','pasteImportBtn','saveImport','saveCustom','useCustom',
+ 'backupBtn','restoreBtn','handOcrRetrySame','handOcrSave','paperGradeSave','checkBtn','gameCheck',
+ 'gameReplay','handBatchNext','paperNext','refreshVoices','gameNext','nextBtn','coverBtn','retryWrong']);
+const actionButtons=new Set(['startBtn','gameStartBtn','importBtn','pasteImportBtn','saveImport','saveCustom','checkBtn','gameCheck',
+ 'handOcrRetrySame','handOcrSave','paperGradeSave','backupBtn','restoreBtn','refreshVoices']);
+D.addEventListener('click',ev=>{
+ if(!CY())return;const b=ev.target.closest?.('button');if(!b||b.disabled||b===btn||b.classList.contains('gameTile')||b.classList.contains('gameSlot'))return;
+ if(loadActions.has(b.id))spark(b,['handBatchNext','handOcrRetrySame','importBtn','pasteImportBtn'].includes(b.id)?2.2:1.4);
+ if(loadActions.has(b.id)||b.classList.contains('btn')||b.closest('.tabnav')){snap(b);b.classList.add('cy-hot');
+  setTimeout(()=>b.classList.remove('cy-hot'),190)}
+},{capture:true,passive:true});
+/* Result reactions only on actual visible state change; no effects on text
+   input/handwriting strokes and no change to the data itself. */
+const resultTargets=[
+ ['studyArea','startBtn'],['gameArea','gameStartBtn'],['resultArea','checkBtn'],
+ ['handOcrWorking','handOcrWorking'],['handOcrReview','handOcrReview'],
+ ['paperGradeArea','paperGradeArea'],['summaryArea','summaryArea'],
+ ['importEditor','importEditor'],['gameSummary','gameSummary'],['gameFeedback','gameFeedback']
+];
+for(const [id,at] of resultTargets){const el=$(id);if(!el)continue;
+ let visible=!el.classList.contains('hidden');
+ new MutationObserver(()=>{const v=!el.classList.contains('hidden');if(CY()&&v&&!visible){
+  const place=$(at)||el;requestAnimationFrame(()=>spark(place,.82));
+ }visible=v}).observe(el,{attributes:true,attributeFilter:['class']});
+}
+const importStatus=$('importStatus');if(importStatus){let prior=importStatus.textContent;
+ new MutationObserver(()=>{const t=importStatus.textContent||'';if(CY()&&t&&t!==prior&&!/읽는 중|처리 중|분석 중|진행 중/.test(t))spark($('importEditor')||importStatus,.67);prior=t})
+ .observe(importStatus,{subtree:true,childList:true,characterData:true})}
+$('importInput')?.addEventListener('change',()=>{if(CY())spark($('importBtn'),.9)},{passive:true});
+$('restoreInput')?.addEventListener('change',()=>{if(CY())spark($('restoreBtn'),.9)},{passive:true});
+/* Successful confirmation of input values: faint pulse, no expensive flicker
+   per keystroke. Game tiles, notebook, and OCR extraction unchanged. */
+D.addEventListener('change',ev=>{
+ if(!CY()||reduced())return;const el=ev.target;
+ if(!el||!el.matches?.('select,input[type=checkbox],input[type=text]'))return;
+ if(el.animate)el.animate([{filter:'brightness(1)'},{filter:'brightness(1.5)'},{filter:'brightness(1)'}],{duration:180});
+},{passive:true});
+function focusWatermark(){const focused=['studyArea','gameArea','handOcrWorking','handOcrReview','paperGradeArea','summaryArea']
+ .some(id=>{const e=$(id);return e&&!e.classList.contains('hidden')});
+ B.classList.toggle('cy-study-focus',focused)}
+const home=$('homeView');if(home){new MutationObserver(focusWatermark)
+ .observe(home,{subtree:false,childList:true})} // follow actual panel visibility below
+for(const id of ['setupArea','studyArea','gameArea','handOcrWorking','handOcrReview','paperGradeArea','summaryArea']){
+ const el=$(id);if(el)new MutationObserver(focusWatermark).observe(el,{attributes:true,attributeFilter:['class']});
+}
+
+/* FIX6 — local active-process arc renderer. One reusable overlay canvas, capped
+   at 30 fps; observes UI state rather than wrapping/altering OCR/PDF functions. */
+const CyBusyFX=(()=>{
+ let cv=null,g=null,target=null,origin=null,rafId=0,lastFrame=0,W=0,H=0,dpr=1;
+ let arcs=[],embers=[],burst=0,rectCache=null;
+ const PAD=34,COL=['#00e8ff','#9cfaff','#ffffff','#ff2bd1','#dfffff'];
+ function create(){if(cv)return;cv=D.createElement('canvas');cv.setAttribute('aria-hidden','true');cv.className='cy-writing-busy-fx';
+  Object.assign(cv.style,{position:'fixed',pointerEvents:'none',display:'none',zIndex:'99997',left:'0',top:'0'});
+  B.appendChild(cv);g=cv.getContext('2d',{alpha:true});}
+ function place(){if(!target||!target.isConnected||target.classList.contains('hidden'))return false;
+  const r=target.getBoundingClientRect();if(r.width<3||r.height<3||r.bottom<0||r.top>innerHeight)return false;
+  const w=Math.min(1500,Math.ceil(r.width+2*PAD)),h=Math.min(600,Math.ceil(r.height+2*PAD));
+  const x=Math.round(r.left-PAD),y=Math.round(r.top-PAD);
+  cv.style.left=x+'px';cv.style.top=y+'px';cv.style.width=w+'px';cv.style.height=h+'px';
+  if(W!==w||H!==h){W=w;H=h;dpr=Math.min(1.5,devicePixelRatio||1);cv.width=Math.ceil(w*dpr);cv.height=Math.ceil(h*dpr);g.setTransform(dpr,0,0,dpr,0,0);}
+  rectCache={x:PAD,y:PAD,w:r.width,h:r.height};return true;}
+ function edge(){const b=rectCache,t=Math.random(),k=(Math.random()*4)|0;
+  if(k===0)return[b.x+b.w*t,b.y];if(k===1)return[b.x+b.w*t,b.y+b.h];
+  if(k===2)return[b.x,b.y+b.h*t];return[b.x+b.w,b.y+b.h*t];}
+ function lightning(a,b){const len=Math.hypot(b[0]-a[0],b[1]-a[1])||1,n=Math.max(4,Math.min(15,Math.ceil(len/13))),pts=[];
+  const nx=-(b[1]-a[1])/len,ny=(b[0]-a[0])/len;
+  for(let i=0;i<=n;i++){const t=i/n,off=i===0||i===n?0:(Math.random()-.5)*Math.min(27,len*.20);
+   pts.push([a[0]+(b[0]-a[0])*t+nx*off,a[1]+(b[1]-a[1])*t+ny*off]);}
+  return pts;}
+ function newArc(){if(!rectCache)return;const q=Math.random();let a=edge(),b;
+  if(q<.49){const z=rectCache,side=(Math.random()*4)|0,dist=(24+Math.random()*115)*(Math.random()<.5?-1:1);
+   if(side===0){a=[z.x+Math.random()*z.w,z.y];b=[Math.max(z.x,Math.min(z.x+z.w,a[0]+dist)),z.y]}
+   else if(side===1){a=[z.x+Math.random()*z.w,z.y+z.h];b=[Math.max(z.x,Math.min(z.x+z.w,a[0]+dist)),z.y+z.h]}
+   else if(side===2){a=[z.x,z.y+Math.random()*z.h];b=[z.x,Math.max(z.y,Math.min(z.y+z.h,a[1]+dist))]}
+   else{a=[z.x+z.w,z.y+Math.random()*z.h];b=[z.x+z.w,Math.max(z.y,Math.min(z.y+z.h,a[1]+dist))]}}
+
+  else if(q<.78){b=[a[0]+(Math.random()-.5)*Math.min(120,rectCache.w*.38),a[1]+(Math.random()-.5)*Math.min(95,rectCache.h*.95)];}
+  else{let ang=Math.random()*Math.PI*2,len=25+Math.random()*70;b=[a[0]+Math.cos(ang)*len,a[1]+Math.sin(ang)*len];}
+  const pts=lightning(a,b),color=COL[(Math.random()*COL.length)|0];arcs.push({pts,life:5+Math.random()*5,max:10,c:color,width:1.3+Math.random()*1.6});
+  for(let k=0;k<7;k++){const origin=k%2===0?a:b,ang=Math.random()*Math.PI*2,spd=1.6+Math.random()*4;
+   embers.push({x:origin[0],y:origin[1],vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,life:10+Math.random()*13,c:k%3?'#c7ffff':'#ffe7ab'});}
+  if(arcs.length>65)arcs.splice(0,arcs.length-65);if(embers.length>170)embers.splice(0,embers.length-170);
+ }
+ function drawStroke(pts,width,color,alpha){g.beginPath();g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)g.lineTo(pts[i][0],pts[i][1]);
+  g.lineWidth=width;g.strokeStyle=color;g.globalAlpha=alpha;g.stroke();}
+ function frame(ts){if(!target){rafId=0;return;}rafId=requestAnimationFrame(frame);
+  if(ts-lastFrame<32)return;lastFrame=ts;
+  if(!CY()||D.hidden||reduced()||!place()){pause();return;}
+  g.clearRect(0,0,W,H);g.save();g.globalCompositeOperation='lighter';g.lineCap='round';g.lineJoin='round';
+  // A brief high-energy ignition burst, followed by live arc flicker while loading.
+  const cycles=burst>0?5:((Math.random()<.85)?2:1);for(let i=0;i<cycles;i++)newArc();if(burst>0)burst--;
+  for(const a of arcs){const alpha=Math.max(0,a.life/a.max);
+   drawStroke(a.pts,a.width+9,a.c,alpha*.15);drawStroke(a.pts,a.width+3,a.c,alpha*.58);drawStroke(a.pts,.9,'#ffffff',alpha*.85);
+   a.life--;}arcs=arcs.filter(a=>a.life>0);
+  for(const p of embers){let x=p.x,y=p.y;p.vy+=.11;p.x+=p.vx;p.y+=p.vy;p.vx*=.97;
+   g.beginPath();g.moveTo(x,y);g.lineTo(p.x,p.y);g.lineWidth=1.5;g.strokeStyle=p.c;g.globalAlpha=Math.min(1,p.life/12);g.stroke();p.life--;
+  }embers=embers.filter(p=>p.life>0);
+  g.restore();g.globalAlpha=1;
+ }
+ function pause(){if(rafId)cancelAnimationFrame(rafId);rafId=0;if(cv)cv.style.display='none';}
+ function stop(){pause();if(target)target.classList.remove('cy-processing');if(origin)origin.classList.remove('cy-processing');
+  target=null;origin=null;rectCache=null;arcs=[];embers=[];burst=0;}
+ function start(el,source){if(!CY()||reduced()||!el)return; if(target===el&&rafId)return;
+  stop();target=el;origin=source||null;create();cv.style.display='block';
+  el.classList.add('cy-processing');if(origin&&origin!==el)origin.classList.add('cy-processing');
+  burst=13;lastFrame=0;place();rafId=requestAnimationFrame(frame);}
+ return{start,stop,pause,active:()=>!!target};
+})();
+const working=$('handOcrWorking');
+function updateOcrFX(){if(!CY()||!working||working.classList.contains('hidden')){
+ if(!($('importStatus')?.classList.contains('cy-processing')))CyBusyFX.stop();return;}
+ CyBusyFX.start(working);
+}
+if(working)new MutationObserver(updateOcrFX).observe(working,{attributes:true,attributeFilter:['class']});
+const importProgress=$('importStatus');
+function updateImportFX(){if(!importProgress)return;
+ const s=importProgress.textContent||'';
+ const busy=/읽고\s*있|읽는\s*중|분석하고\s*있|분석\s*중|인식하고\s*있|인식\s*중|처리\s*중|추출\s*중|불러오는\s*중|전송\s*중/.test(s);
+ if(busy&&CY())CyBusyFX.start($('importBtn')||importProgress,importProgress);
+ else if(importProgress.classList.contains('cy-processing'))CyBusyFX.stop();
+}
+if(importProgress)new MutationObserver(updateImportFX).observe(importProgress,{subtree:true,childList:true,characterData:true});
+// Theme and background transitions stop FX instead of leaving a running render loop.
+btn.addEventListener('click',()=>{if(!CY())CyBusyFX.stop();else{updateOcrFX();updateImportFX();}},{passive:true});
+D.addEventListener('visibilitychange',()=>{if(D.hidden)CyBusyFX.pause();else{updateOcrFX();updateImportFX();}},{passive:true});
+window.addEventListener('pagehide',()=>CyBusyFX.stop(),{passive:true});
+
+let preference=false;try{preference=localStorage.getItem(KEY)==='1'}catch(_){}
+setTheme(preference,false);focusWatermark();
+})();
+</script>
+
+</body></html>

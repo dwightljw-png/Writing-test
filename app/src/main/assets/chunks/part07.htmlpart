@@ -1,0 +1,200 @@
+ if(!paper.classList.contains('gridPaper')||drawSize.w<10||drawSize.h<10)return null;
+ const cell=Number.parseFloat(getComputedStyle(paper).getPropertyValue('--notebook-cell'));
+ if(!Number.isFinite(cell)||cell<=0)return null;
+ return {w:drawSize.w,h:drawSize.h,cell,cols:Math.max(1,Math.round(drawSize.w/cell)),rows:Math.max(1,Math.round(drawSize.h/cell))};
+}
+function copyHandDraft(){
+ if(!session||!session.autoHand)return;
+ finishStroke();
+ session.handDrafts[session.at]=strokes.map(line=>line.map(p=>p.slice()));
+ session.handGridMeta[session.at]=currentHandGridMeta();
+}
+function handBatchPrev(){if(!session||!session.autoHand||ocrBusy||session.at===0)return;copyHandDraft();session.at--;showQuestion()}
+function handBatchNext(){
+ if(!session||!session.autoHand||ocrBusy)return;
+ copyHandDraft();stopSpeech();
+ if(session.at<session.items.length-1){session.at++;showQuestion();return}
+ const blank=session.handDrafts.filter(lines=>!lines.length).length;
+ if(blank&&!confirm('글씨를 쓰지 않은 문제 '+blank+'개가 있습니다. 그대로 시험을 마치고 채점할까요?'))return;
+ startHandBatchOCR();
+}
+// One occupied square = one handwritten syllable (or a separate punctuation mark).
+// Use stroke bounding-box centres, NOT OCR's guessed word spacing.  Do not use the
+// correct answer at any point in extracting or reconstructing the child's writing.
+function handGridLayout(strokeList,meta){
+ if(!meta||!Number.isFinite(meta.cell)||meta.cell<5||!meta.cols||!meta.rows)return null;
+ const occupied=new Set();
+ for(const stroke of strokeList||[]){
+  if(!stroke?.length)continue;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const p of stroke){const x=p[0]*meta.w,y=p[1]*meta.h;
+   if(!Number.isFinite(x)||!Number.isFinite(y))continue;
+   minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+  }
+  if(!Number.isFinite(minX))continue;
+  const col=Math.max(0,Math.min(meta.cols-1,Math.floor(((minX+maxX)/2)/meta.cell)));
+  const row=Math.max(0,Math.min(meta.rows-1,Math.floor(((minY+maxY)/2)/meta.cell)));
+  occupied.add(row+','+col);
+ }
+ const cells=[...occupied].map(s=>s.split(',').map(Number)).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+ if(!cells.length)return null;
+ const gaps=[];
+ for(let i=1;i<cells.length;i++){
+  // Full blank squares within a line mean spaces; a simple line break doesn't.
+  if((cells[i][0]===cells[i-1][0]&&cells[i][1]>cells[i-1][1]+1)||cells[i][0]>cells[i-1][0]+1)gaps.push(i);
+ }
+ return {cells,gaps,cols:meta.cols,rows:meta.rows};
+}
+function gridLayoutHint(layout){
+ if(!layout)return '';
+ const rows=new Map();for(const [r,c] of layout.cells){if(!rows.has(r))rows.set(r,[]);rows.get(r).push(c+1)}
+ return 'Grid occupied squares (1-based row:columns): '+[...rows].map(([r,cols])=>(r+1)+':'+cols.join(',')).join(' / ')+'. '+
+  'Each occupied square normally holds ONE Korean syllable; an entire empty square between occupied squares on the SAME row is a real word space. '+
+  'Adjacent occupied squares belong to the same word, even when the pen strokes look far apart. '+
+  'A line break alone does not create a word space. Never invent a word space based on visual spacing inside squares.';
+}
+function restoreGridWordSpacing(raw,layout){
+ if(!layout||!layout.cells.length)return {text:raw,applied:false,uncertain:false};
+ const compact=String(raw??'').normalize('NFC').replace(/\s+/g,'');
+ const chars=Array.from(compact);
+ // Detached terminal punctuation may share the final Hangul cell. Do not guess
+ // when the number of visible squares and recognized characters differs.
+ let units=chars;
+ if(chars.length!==layout.cells.length){
+  const withoutEndPunct=compact.match(/^([가-힣]+)([.!?。！？…]+)$/);
+  if(withoutEndPunct&&Array.from(withoutEndPunct[1]).length===layout.cells.length){
+   units=Array.from(withoutEndPunct[1]);units[units.length-1]+=withoutEndPunct[2];
+  }else return {text:raw,applied:false,uncertain:true,reason:'칸에 쓴 글자 수와 OCR 인식 글자 수가 달라 띄어쓰기를 자동 확정하지 않았습니다.'};
+ }
+ let text='';const gaps=new Set(layout.gaps);
+ for(let i=0;i<units.length;i++){if(gaps.has(i))text+=' ';text+=units[i]}
+ return {text,applied:true,uncertain:false};
+}
+function handImage(strokeList,meta){
+ const sourceW=Math.max(1,meta?.w||drawSize.w),sourceH=Math.max(1,meta?.h||drawSize.h);
+ const w=1240,h=Math.max(180,Math.round(w*sourceH/sourceW)),c=document.createElement('canvas');c.width=w;c.height=h;
+ const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);
+ // OCR previously received handwriting on plain white. Restore the real square
+ // notebook, so the model can SEE the child's full-cell word boundaries.
+ if(meta?.cell>0&&meta.cols>0&&meta.rows>0){
+  const sx=w/sourceW,sy=h/sourceH;x.strokeStyle='#cfdef0';x.lineWidth=1.3;
+  for(let col=1;col<meta.cols;col++){let px=col*meta.cell*sx;x.beginPath();x.moveTo(px,0);x.lineTo(px,h);x.stroke()}
+  for(let row=1;row<meta.rows;row++){let py=row*meta.cell*sy;x.beginPath();x.moveTo(0,py);x.lineTo(w,py);x.stroke()}
+ }
+ x.strokeStyle='#17253b';x.lineWidth=5;x.lineCap='round';x.lineJoin='round';
+ for(const stroke of strokeList||[]){if(!stroke.length)continue;x.beginPath();x.moveTo(stroke[0][0]*w,stroke[0][1]*h);if(stroke.length===1)x.lineTo(stroke[0][0]*w+.1,stroke[0][1]*h+.1);else for(let i=1;i<stroke.length;i++)x.lineTo(stroke[i][0]*w,stroke[i][1]*h);x.stroke()}
+ const data=c.toDataURL('image/jpeg',.88);c.width=0;c.height=0;return data;
+}
+async function startHandBatchOCR(retry=false){
+ if(ocrBusy||!session||!session.autoHand)return;
+ const active=session,key=$('geminiKey').value.trim(),model='gemini-3.5-flash-lite';
+ $('writeArea').classList.add('hidden');$('previewArea').classList.add('hidden');$('handOcrWorking').classList.remove('hidden');$('handOcrReview').classList.add('hidden');
+ $('progressFill').style.width='100%';ocrBusy=true;
+ $('handOcrProgress').textContent=(retry?'저장된 손글씨 답안으로 OCR 재시도 중입니다. ':'필기 '+active.items.length+'문제 중 작성한 답안을 전송할 준비 중입니다. ')+'정답 문장은 전송하지 않습니다.';
+ const layouts=retry&&Array.isArray(active.handLayouts)&&active.handLayouts.length===active.items.length
+  ?active.handLayouts:active.handDrafts.map((a,i)=>handGridLayout(a,active.handGridMeta?.[i]));
+ active.handLayouts=layouts;
+ const images=retry&&Array.isArray(active.handImages)&&active.handImages.length===active.items.length ? active.handImages : active.handDrafts.map((a,i)=>a.length?handImage(a,active.handGridMeta?.[i]):null);
+ active.handImages=images;
+ const entries=images.map((data,i)=>({number:i+1,data})).filter(x=>x.data);
+ let extracted={},errMsg='';
+ if(!key){errMsg='API 키가 없습니다. 수동 검수로 전환합니다.'}
+ else if(!entries.length){errMsg='작성된 손글씨가 없어 OCR 요청을 보내지 않았습니다.'}
+ else{
+  // Child's original responses are not sent with expected sentences to prevent answer-key contamination.
+  const parts=[{text:'You are a Korean handwritten-text TRANSCRIPTION engine, not an editor or spelling corrector. The input is a set of independent numbered handwritten responses by a young child. A response may span two or more physical lines; read all lines in natural top-to-bottom, left-to-right order as ONE response, joining line continuations without introducing incorrect extra word spaces. Read only what is literally written. Preserve all visible Korean characters and especially spaces between words; preserve evident punctuation. Do NOT infer or fill words from likely dictation sentences. The images may show a light blue SQUARE NOTEBOOK GRID. One occupied cell typically holds one Hangul syllable. Blank WHOLE cells between syllables mark actual word spaces. Adjacent occupied cells do NOT form a space. Do not use visual distance between letters within cells to invent spaces. The exact occupied-cell coordinates will be given in the label preceding each image, when available. If illegible, keep best literal transcription and set uncertain true. Blank images should have text "". Return exactly one JSON object: {"answers":[{"number":1,"text":"...","uncertain":false},...]}. Provide one response per numbered image. Do not include commentary. Images follow in the same order as numbers, each with a preceding label.'}];
+  for(const e of entries){parts.push({text:'HANDWRITTEN ANSWER #'+e.number+' (transcribe exactly; no correction). '+gridLayoutHint(layouts[e.number-1])});parts.push({inline_data:{mime_type:'image/jpeg',data:e.data.split(',')[1]}})}
+  ocrController=new AbortController();
+  try{
+   const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
+    method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
+    signal:ocrController.signal,
+    body:JSON.stringify({contents:[{role:'user',parts}],generationConfig:{temperature:0,responseMimeType:'application/json',maxOutputTokens:Math.max(4096,entries.length*220)}})
+   });
+   const raw=await res.text();let json;try{json=JSON.parse(raw)}catch(_){throw Error('API 응답을 해석할 수 없습니다. ('+res.status+')')}
+   if(!res.ok){if(res.status===503)throw Error('Google API 503 · 서버가 일시적으로 혼잡합니다. 손글씨는 그대로 남아 있습니다. 잠시 뒤 OCR만 다시 시도하세요.');if(res.status===429)throw Error('Google API 429 · 호출 제한 또는 할당량에 도달했습니다. 요청 제한과 요금을 확인한 뒤 다시 시도하세요.');throw Error('Google API '+res.status+': '+String(json.error?.message||raw.slice(0,180)).slice(0,240));}
+   const content=(json.candidates||[]).flatMap(x=>x.content?.parts||[]).map(p=>p.text||'').join('').trim();
+   if(!content)throw Error('모델이 인식 글자를 반환하지 않았습니다.');
+   let parsed=JSON.parse(content.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''));
+   if(!Array.isArray(parsed.answers))throw Error('응답의 문제 번호 구조가 올바르지 않습니다.');
+   for(const a of parsed.answers){let i=Number(a.number)-1;if(Number.isInteger(i)&&i>=0&&i<images.length&&images[i]&&!Object.hasOwn(extracted,i)){const spaced=restoreGridWordSpacing(String(a.text??''),layouts[i]);extracted[i]={text:spaced.text,uncertain:!!a.uncertain||spaced.uncertain,gridApplied:spaced.applied,gridWarning:spaced.reason||''}}}
+  }catch(e){if(e.name==='AbortError')return;errMsg=geminiOcrErrorText(e)}finally{ocrController=null}
+ }
+ if(session!==active)return;
+ ocrBusy=false;
+ const manual=Array.isArray(active.handManualEdited)?active.handManualEdited:[];
+ const oldOCR=active.handOCR||[],oldMarks=active.handMarks||[];
+ active.handOCR=images.map((img,i)=>retry&&manual[i]&&oldOCR[i]?oldOCR[i]:!img?{text:'',uncertain:false,blank:true}:Object.hasOwn(extracted,i)?{...extracted[i],blank:false}:{text:'',uncertain:true,missing:true,blank:false});
+ active.handMarks=active.handOCR.map((o,i)=>retry&&manual[i]?oldMarks[i]:o.blank?false:o.uncertain||o.missing?null:evalAnswer(o.text,active.items[i][0]).ok);
+ $('handOcrWorking').classList.add('hidden');
+ showHandOcrReview(errMsg,entries.length>0&&Object.keys(extracted).length>0);
+}
+function showHandOcrReview(errMsg,hasResults){
+ if(!session)return;
+ $('handOcrReview').classList.remove('hidden');$('studyModeBadge').textContent='✍️ 손글씨 · 일괄 채점 검수';
+ const info=$('handOcrInfo');info.className='auditStatus'+(!errMsg?' ok':'');
+ info.textContent=errMsg?'⚠️ '+errMsg+'\n필기는 그대로 보관 중입니다. 직접 채점하거나 아래 버튼으로 OCR만 다시 시도할 수 있습니다. 추가 API 요청은 자동으로 하지 않습니다.':hasResults?'✅ 손글씨 답안 전체를 Google API로 한 번에 인식했습니다. 칸 공책은 실제 빈칸에 맞춰 띄어쓰기를 복원했습니다. 글자 수가 칸과 맞지 않으면 직접 확인이 필요합니다.':'작성한 글씨가 없어 Google API를 호출하지 않았습니다.';
+ const canRetry=!!errMsg&&Array.isArray(session.handImages)&&session.handImages.some(Boolean);
+ $('handOcrRetryTools').classList.toggle('hidden',!canRetry);
+ const root=$('handOcrReviewList');root.replaceChildren();
+ session.items.forEach((it,i)=>{
+  const row=document.createElement('section');row.className='ocrReviewItem';
+  const header=document.createElement('b');header.textContent=(i+1)+'번 손글씨';row.append(header);
+  if(session.handImages&&session.handImages[i]){const im=document.createElement('img');im.src=session.handImages[i];im.alt=(i+1)+'번에 쓴 손글씨';im.loading='lazy';row.append(im)}else{const no=document.createElement('div');no.className='notice topMargin';no.textContent='(작성한 글씨 없음)';row.append(no)}
+  const label=document.createElement('label');label.className='small muted';label.textContent=session.handOCR[i]?.gridWarning?'인식한 문장 · ⚠️ 칸 위치와 글자 수를 확인해 주세요':'인식한 문장 · 빈칸 기준 띄어쓰기 · 수정 가능';label.setAttribute('for','ocrAnswer'+i);row.append(label);
+  const inp=document.createElement('input');inp.type='text';inp.className='field';inp.id='ocrAnswer'+i;inp.value=session.handOCR[i]?.text||'';inp.autocomplete='off';inp.spellcheck=false;row.append(inp);
+  const ansLab=document.createElement('div');ansLab.className='small muted topMargin';ansLab.textContent='정답';row.append(ansLab);
+  const correct=document.createElement('div');correct.className='correctAnswer';correct.textContent=it[0];row.append(correct);
+  const status=document.createElement('div');status.className='judgeStatus';row.append(status);
+  const actions=document.createElement('div');actions.className='judgeActions';const btns=[];
+  for(const opt of [{mark:true,text:'⭕ 맞음으로 수정'},{mark:false,text:'❌ 틀림으로 수정'}]){
+   const b=document.createElement('button');b.type='button';b.className='btn soft';b.textContent=opt.text;
+   b.addEventListener('click',()=>{session.handManualEdited[i]=true;session.handMarks[i]=opt.mark;refresh();updateTips();updateHandOcrProgress()});btns.push([b,opt.mark]);actions.append(b)
+  }row.append(actions);
+  const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='💡 맞춤법 팁 · 실제 오답 분석';const detailBody=document.createElement('div');details.append(summary,detailBody);row.append(details);function updateTips(){renderMistakeTips(detailBody,it[0],it[1]||'',session.handMarks[i]===false&&!session.handOCR[i]?.uncertain&&!session.handOCR[i]?.missing&&!session.handOCR[i]?.blank?session.handOCR[i].text:null)}
+  inp.addEventListener('input',()=>{session.handManualEdited[i]=true;session.handOCR[i].text=inp.value;session.handOCR[i].uncertain=false;session.handOCR[i].missing=false;session.handMarks[i]=session.handOCR[i].blank?false:evalAnswer(inp.value,it[0]).ok;refresh();updateTips();updateHandOcrProgress()});
+  function refresh(){const value=session.handMarks[i];status.textContent=value===null?'⚠️ 인식 불확실 · 직접 맞음/틀림을 선택하세요':value?'✅ 정답 판정':'🌱 오답 판정'+(session.handOCR[i]?.blank?' · 빈 답안':'');btns.forEach(([b,mark])=>{b.classList.toggle('selectedGood',value===mark&&mark);b.classList.toggle('selectedBad',value===mark&&!mark)})}
+  refresh();updateTips();root.append(row)
+ });updateHandOcrProgress();
+}
+// The text-only connectivity check is deliberately opt-in and NEVER uploads handwriting.
+// It verifies model/key/browser access separately from the larger multi-image OCR request.
+function geminiOcrErrorText(e){
+ const detail=String(e?.message||e||'');
+ if(e?.name==='TypeError'&&/failed to fetch|networkerror|load failed|fetch/i.test(detail)){
+  const local=/^(file:|content:)$/.test(location.protocol);
+  return 'Google API 연결에 실패했습니다 (Failed to fetch). 이는 모델의 글자 인식 실패가 아니라 브라우저/네트워크 단계의 오류입니다.'
+   +(local?' 현재 다운로드 HTML을 직접 실행하고 있어(content:// 또는 file://) 외부 API의 브라우저 보안 제한(CORS)이 영향을 줄 수 있습니다.':'')
+   +' 아래 [Google OCR 연결 확인] 버튼으로 소량의 요청을 검사할 수 있습니다. 손글씨와 정답은 전송하지 않습니다.';
+ }
+ return detail;
+}
+async function testHandOcrConnection(where='review'){
+ const btn=$(where==='parent'?'handOcrConnTestParent':'handOcrConnTest'),status=$(where==='parent'?'handOcrConnStatusParent':'handOcrConnStatus'),key=$('geminiKey').value.trim();
+ if(!key){status.textContent='⚠️ 상단에 Google API 키를 입력해 주세요.';return;}
+ if(ocrBusy)return;
+ btn.disabled=true;status.textContent='🔌 Gemini 3.5 Flash-Lite에 텍스트로만 연결을 확인 중입니다. (API 요청 1회, 손글씨 전송 없음)';
+ try{
+  const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{
+   method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
+   body:JSON.stringify({contents:[{role:'user',parts:[{text:'연결 확인입니다. 다른 설명 없이 OK라고만 답하세요.'}]}],generationConfig:{maxOutputTokens:64}})
+  });
+  if(resp.ok){status.textContent='✅ Gemini 3.5 Flash-Lite 연결 성공 (HTTP '+resp.status+'). 모델과 API 키는 이 브라우저에서 접근됩니다. 10문제 이미지 요청은 별도 문제일 수 있으니 같은 모델 재시도를 눌러 확인하세요.';return;}
+  let reason='';
+  try{const payload=await resp.json();reason=String(payload?.error?.message||'').slice(0,220).replaceAll(key,'[보안상 숨김]')}catch(_){reason=''}
+  let guide=resp.status===400?'요청 형식 또는 키를 확인하세요.':resp.status===401||resp.status===403?'API 키·접근 권한·키의 웹사이트 제한을 확인하세요.':resp.status===404?'모델 또는 API 주소가 허용되지 않았습니다.':resp.status===429?'사용량 또는 호출 한도에 도달했습니다.':resp.status===503?'Google 서버가 일시적으로 혼잡합니다.':'Google API가 오류를 반환했습니다.';
+  status.textContent='⚠️ Google API HTTP '+resp.status+' · '+guide+(reason?' ('+reason+')':'');
+ }catch(e){
+  const local=/^(file:|content:)$/.test(location.protocol);
+  status.textContent='⚠️ Google 서버의 HTTP 응답을 읽지 못했습니다. 브라우저 보안(CORS) 또는 네트워크 연결 문제일 수 있습니다.'+(local?' 현재 다운로드 파일을 content:// 또는 file://로 실행 중입니다. HTTPS로 호스팅해 열면 원인 구분에 도움이 됩니다.':'')+' 손글씨는 보존됩니다.';
+ }finally{btn.disabled=false}
+}
+function retryStoredHandOCR(){
+ if(!session||!session.autoHand||ocrBusy||!Array.isArray(session.handImages)||!session.handImages.some(Boolean))return;
+ if(!$('geminiKey').value.trim()){alert('상단에 Gemini API 키를 입력한 뒤 재시도해 주세요.');$('geminiKey').focus();return;}
+ updateOcrHeader();startHandBatchOCR(true);
+}
+function updateHandOcrProgress(){const marks=session?.handMarks||[];let n=marks.filter(v=>v!==null).length;$('handOcrReviewProgress').textContent=n+' / '+marks.length+'문제 채점 확인 · '+(marks.length-n)+'문제 검토 필요';$('handOcrSave').disabled=n!==marks.length||!marks.length}
+function saveHandOcrGrade(){if(!session||!session.autoHand||ocrBusy||session.handMarks.some(x=>x===null))return;if(!session.retryMode){for(let i=0;i<session.items.length;i++){session.at=i;session.recorded=false;markResult(session.handMarks[i],session.handMarks[i]===false&&session.handOCR[i]&&!session.handOCR[i].missing&&!session.handOCR[i].uncertain&&!session.handOCR[i].blank?session.handOCR[i].text:null,'writing')}}session.at=session.items.length-1;$('handOcrReview').classList.add('hidden');session.handImages=[];showSummary()}
+
+function retryNow(){session.retrial=true;strokes=[];currentStroke=null;repaint();$('typeAnswer').value='';$('resultArea').classList.add('hidden');$('checkRow').classList.remove('hidden');$('previewArea').classList.add('hidden');$('writeArea').classList.remove('hidden');speak(currentItem()[0])}

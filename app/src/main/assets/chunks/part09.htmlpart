@@ -1,0 +1,200 @@
+ $('pdfOriginalReview').classList.add('hidden');
+ if(old)URL.revokeObjectURL(old);
+}
+function setPdfOriginal(file){
+ releasePdfOriginal();
+ if(file&&/\.pdf$/i.test(file.name)){
+  pdfReviewUrl=URL.createObjectURL(file);
+  $('pdfSourceLink').href=pdfReviewUrl;
+  $('pdfOriginalReview').classList.remove('hidden');
+  // Do not render the entire PDF in a hidden iframe: load only on demand.
+ }
+}
+$('pdfOriginalReview').addEventListener('toggle',()=>{
+ const iframe=$('pdfSourceFrame');
+ if($('pdfOriginalReview').open&&pdfReviewUrl){if(iframe.getAttribute('src')!==pdfReviewUrl)iframe.src=pdfReviewUrl;}
+ else iframe.removeAttribute('src');
+});
+async function loadPdfJs(){
+ if(window.pdfjsLib)return window.pdfjsLib;
+ if(!pdfJsReady)pdfJsReady=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');script.src=PDFJS_URL;
+  script.onload=()=>window.pdfjsLib?resolve(window.pdfjsLib):reject(Error('PDF 분석 모듈을 사용할 수 없습니다.'));
+  script.onerror=()=>reject(Error('PDF.js 파일을 불러오지 못했습니다. 인터넷 연결을 확인하거나 Google AI PDF 인식 방식을 선택하세요.'));
+  document.head.appendChild(script);
+ }).catch(err=>{pdfJsReady=null;throw err});
+ const lib=await pdfJsReady;lib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER;return lib;
+}
+function pdfVisualRows(items, width, split){
+ const lanes=split?[{name:'왼쪽',min:-Infinity,max:width*.5},{name:'오른쪽',min:width*.5,max:Infinity}]:[{name:'전체',min:-Infinity,max:Infinity}];
+ return lanes.map(lane=>{
+  const picked=items.filter(it=>it.x>=lane.min&&it.x<lane.max).sort((a,b)=>a.y-b.y||a.x-b.x);
+  const lines=[];
+  for(const token of picked){
+   let row=lines[lines.length-1],tol=Math.max(2.6,Math.min(6,token.font*0.36));
+   if(!row||Math.abs(row.y-token.y)>tol){row={y:token.y,items:[]};lines.push(row)}
+   row.items.push(token);
+  }
+  return {name:lane.name,rowEntries:lines.map(row=>{
+   let sorted=row.items.sort((a,b)=>a.x-b.x),out='',prev=null;
+   for(const token of sorted){
+    const current=String(token.str||'');if(!current.trim())continue;
+    if(prev){
+     const gap=token.x-(prev.x+prev.width),font=Math.max(8,Math.min(token.font,prev.font));
+     if(gap>font*.48&&!/\s$/.test(out)&&!/^[,.;!?)]/.test(current))out+=' ';
+    }
+    out+=current;prev=token;
+   }
+   return {y:row.y,text:tidyText(out).replace(/^(\d{1,3})\s+(?=[가-힣])/, '$1. ')};
+  }).filter(v=>v.text)};
+ });
+}
+function pdfHasTwoColumns(items,width){
+ const left=items.filter(it=>it.x>=0&&it.x<width*.48).map(it=>it.str).join(' '),
+       right=items.filter(it=>it.x>=width*.50).map(it=>it.str).join(' ');
+ const heading=/(?:[<〈【\[]\s*\d{1,4}\s*(?:급|단계|장|단원|차시)|(?:제\s*)?\d{1,4}\s*(?:급|단계|단원|장))/;
+ if(heading.test(left)&&heading.test(right))return true;
+ // Prefer a single column unless there is clear independent numbering on both sides.
+ const lNums=items.filter(it=>it.x<width*.20&&/^\s*\d{1,3}\s*[.)]?\s*$/.test(it.str)).length;
+ const rNums=items.filter(it=>it.x>width*.48&&it.x<width*.70&&/^\s*\d{1,3}\s*[.)]?\s*$/.test(it.str)).length;
+ return lNums>=3&&rNums>=3;
+}
+async function extractPdfSources(file,name){
+ const lib=await loadPdfJs(),arr=new Uint8Array(await file.arrayBuffer());
+ let doc,task;
+ try{task=lib.getDocument({data:arr,useSystemFonts:true});doc=await task.promise}
+ catch(e){if(task&&typeof task.destroy==='function')try{await task.destroy()}catch(_){}throw Error('PDF 파일을 열지 못했습니다. 암호 보호·손상 여부를 확인하세요: '+(e.message||e))}
+ const sources=[],scanPages=[];let total=0;
+ try{
+  for(let pageNum=1;pageNum<=doc.numPages;pageNum++){
+   const page=await doc.getPage(pageNum),text=await page.getTextContent();
+   const items=text.items.filter(it=>typeof it.str==='string'&&it.str.trim()).map(it=>({str:it.str,x:Number(it.transform?.[4]||0),y:-Number(it.transform?.[5]||0),width:Number(it.width||0),font:Math.max(9,Math.abs(Number(it.transform?.[3]||12)))}));
+   let chars=items.map(it=>it.str).join('').replace(/\s/g,'').length;
+   if(chars<15){scanPages.push(pageNum);continue}
+   total+=chars;
+   const viewport=page.getViewport({scale:1}),split=pdfHasTwoColumns(items,viewport.width);
+   const pageSections=[];
+   for(const lane of pdfVisualRows(items,viewport.width,split)){
+    const rows=lane.rowEntries;if(!rows.length)continue;
+    const first=rows.findIndex(row=>!!parseGroupTitle(row.text));
+    // Printed page headers are not dictation questions. Keep them in the audit trace.
+    const work=first>=0?rows.slice(first):rows;
+    let chunks=[];
+    for(const row of work){
+     if(parseGroupTitle(row.text)||!chunks.length)chunks.push({y:row.y,rows:[]});
+     chunks[chunks.length-1].rows.push(row.text);
+    }
+    for(const chunk of chunks){
+     pageSections.push({y:chunk.y,x:lane.name==='오른쪽'?1:0,source:{
+      name:name+' · '+pageNum+'쪽'+(split?' · '+lane.name:''),text:chunk.rows.join('\n'),
+      auditOriginal:(first>0?rows.slice(0,first).map(v=>v.text).join('\n')+'\n':'')+chunk.rows.join('\n'),
+      issues:['PDF '+pageNum+'쪽의 글자 위치를 분석했습니다. 띄어쓰기와 문항을 원본과 대조하세요.']
+      .concat(first>0?['시험 문장 앞의 표제/작성란 '+first+'행을 인식 목록에서 제외했습니다.']:[])
+      .concat(split?['좌우 두 열을 구분했습니다. 문장 순서를 원본과 대조하세요.']:[])
+     }});
+    }
+   }
+   // Reading order: top section of left column, then top section of right column.
+   pageSections.sort((a,b)=>Math.abs(a.y-b.y)<14?a.x-b.x:a.y-b.y);
+   sources.push(...pageSections.map(p=>p.source));
+  }
+ }finally{try{await doc.destroy()}catch(_){}}
+ return {sources,scanPages,total,pageCount:doc.numPages};
+}
+function fileAsBase64(file){return new Promise((resolve,reject)=>{
+ const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('PDF 파일을 읽지 못했습니다.'));reader.readAsDataURL(file);
+})}
+async function extractPdfWithGoogle(file,name){
+ const key=$('geminiKey').value.trim();if(!key)throw Error('스캔 PDF/AI 인식에는 Google Gemini API 키가 필요합니다. 화면 맨 위에 키를 입력해 주세요.');
+ if(file.size>18*1024*1024)throw Error('기기 메모리 보호를 위해 AI 직접 전송은 18MB 이하 PDF만 허용합니다. 큰 PDF는 나누어 불러와 주세요.');
+ const model='gemini-3.5-flash-lite',b64=await fileAsBase64(file),prompt=`초등학생 한국어 받아쓰기 문제집 PDF를 시각적으로 읽어 문제은행을 추출하세요.
+- 학교마다 급수/장/단/단계/차시/Unit 등 묶음 제목은 다양합니다. 실제 제목을 있는 그대로 그룹 이름으로 사용하세요.
+- 가로 2열이나 여러 표가 있는 경우 각 열의 독립적인 문제 번호와 묶음을 유지하고 같은 행의 양쪽 문제를 섞지 마세요.
+- 문제 수는 고정하지 마세요. 모든 페이지·모든 문제를 빠짐없이 읽고 페이지 순서를 지키세요.
+- 원고지 칸 간격과 실제 단어 사이 띄어쓰기를 구분하세요. 글자를 칸마다 떨어뜨려 인쇄한 것은 한 낱말로 합치세요.
+- 정답을 임의로 교정하거나 내용을 지어내지 마세요. 식별이 불확실하면 issues에 '쪽/급수/번호/이유'를 적고 해당 글자는 최대한 원문대로 전사하세요.
+- 풀이 설명, 이름 기입란, 머리글, 쪽 번호, 장식 문구는 시험 문장에 포함하지 마세요.
+- 반드시 JSON만 반환: {"groups":[{"name":"1급 · 기분을 말해요","items":["신나요.","뿌듯해요."]}],"issues":["2쪽 3번 ..."]}.
+- 문장 목록은 순서대로, 급수가 바뀌면 새 그룹을 만들어 주세요. 문제 번호는 items 문자열에서 제거하세요.`;
+ const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
+  method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
+  body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt},{inline_data:{mime_type:'application/pdf',data:b64}}]}],generationConfig:{temperature:0,responseMimeType:'application/json',maxOutputTokens:16384}})
+ });
+ const body=await response.text();let parsed;try{parsed=JSON.parse(body)}catch(_){throw Error('Google API의 응답을 해석하지 못했습니다. 상태: '+response.status)}
+ if(!response.ok){let hint=response.status===503?'서버가 혼잡합니다. 잠시 후 다시 시도하거나 다른 모델을 선택하세요.':response.status===429?'호출 제한/사용량을 확인하세요.':String(parsed.error?.message||'요청 실패');throw Error('Google PDF 인식 '+response.status+' · '+hint)}
+ const raw=(parsed.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('').trim();
+ let result;try{result=JSON.parse(raw.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''))}catch(_){throw Error('Google이 문장 목록을 올바른 JSON으로 반환하지 않았습니다. 원본은 유지됩니다.')}
+ if(!Array.isArray(result.groups)||!result.groups.length)throw Error('Google이 인식할 수 있는 문장 묶음을 찾지 못했습니다.');
+ const groups=result.groups.map(g=>({name:name+' · '+tidyText(g.name||'묶음'),items:(Array.isArray(g.items)?g.items:[]).map(q=>[tidyText(typeof q==='string'?q:q?.text||''),'']).filter(v=>v[0])})).filter(g=>g.items.length);
+ if(!groups.length)throw Error('읽어 온 문제 문장이 없습니다.');
+ const issues=(Array.isArray(result.issues)?result.issues:[]).map(x=>String(x).slice(0,220));
+ return {groups,sources:[{name:name+' · Google AI 분석',text:groups.map(g=>g.name+'\n'+g.items.map((q,i)=>(i+1)+'. '+q[0]).join('\n')).join('\n\n'),issues:['Google AI가 PDF 이미지를 해석했습니다. OCR 오류/누락과 실제 띄어쓰기를 반드시 원본과 대조하세요.'].concat(issues)}]};
+}
+async function parsePdfDocument(file,name,status){
+ const mode=$('pdfImportMode').value;
+ if(mode==='ai'){
+  if(!confirm('PDF 전체를 Google Gemini로 전송해 문제를 인식할까요? API 사용량/요금이 발생할 수 있습니다.'))throw Error('PDF AI 인식을 취소했습니다.');
+  status.textContent='Google Gemini로 PDF의 표·문장·급수를 분석하고 있어요…';return extractPdfWithGoogle(file,name);
+ }
+ try{
+  status.textContent='PDF 글자·페이지·열 좌표를 읽고 있어요…';const result=await extractPdfSources(file,name);
+  if(result.scanPages.length){
+   if(mode==='text'||!$('geminiKey').value.trim())throw Error('이 PDF의 '+result.scanPages.join(', ')+'쪽은 이미지(스캔)라서 글자를 추출할 수 없습니다. 상단에 Google API 키를 입력하고 PDF 가져오기 방식을 「Google AI 문서 인식」으로 선택해 주세요. 기존 문장은 등록되지 않았습니다.');
+   if(!confirm('PDF '+result.scanPages.join(', ')+'쪽에서 글자를 찾지 못했습니다. 전체 PDF를 Google Gemini로 보내 시각적으로 인식할까요? 비용이 발생할 수 있습니다.'))throw Error('스캔 페이지 인식을 취소했습니다.');
+   status.textContent='스캔 PDF를 Google Gemini로 인식하고 있어요…';return extractPdfWithGoogle(file,name);
+  }
+  if(!result.sources.length)throw Error('PDF에서 문장을 추출할 수 없습니다. Google AI 문서 인식 방식을 선택해 주세요.');
+  return {sources:result.sources};
+ }catch(e){
+  if(mode==='auto'&&$('geminiKey').value.trim()&&/PDF.js|분석 모듈/.test(String(e.message||''))&&confirm('PDF 문자 분석 모듈 연결에 실패했습니다. Google Gemini AI로 PDF를 인식할까요? 별도 요금이 발생할 수 있습니다.')){
+   status.textContent='Google Gemini로 PDF를 인식 중입니다…';return extractPdfWithGoogle(file,name);
+  }
+  throw e;
+ }
+}
+async function importFile(f){
+ let status=$('importStatus');status.textContent='문서를 읽고 문장과 묶음을 분석하고 있어요…';pendingImport=null;pendingAudit=null;resetImportVerification();$('importSourceText').textContent='';$('importAuditStatus').textContent='';$('importPreview').textContent='';$('importGroupText').value='';$('importGroupSelect').replaceChildren();$('saveImport').classList.add('hidden');$('importPreview').classList.add('hidden');$('importEditor').classList.add('hidden');
+ try{let ext=f.name.split('.').pop().toLowerCase(),name=tidyText($('importName').value)||f.name.replace(/\.[^.]+$/,''),sources=[];
+   let parsedGroups=null;
+   setPdfOriginal(f);
+   if(ext==='pdf'){const parsed=await parsePdfDocument(f,name,status);sources=parsed.sources;parsedGroups=parsed.groups||null;}
+   else if(['hwp','jpg','jpeg','png'].includes(ext))throw Error(ext.toUpperCase()+'의 직접 추출은 아직 지원하지 않습니다. DOCX/HWPX로 변환하거나 내용을 붙여넣어 주세요.');
+   if(['docx','xlsx','hwpx'].includes(ext))sources=await parseOffice(f,ext);
+   else if(['txt','csv','tsv'].includes(ext)){let raw=await f.text();if(ext==='txt'){let lines=raw.split(/\r?\n/).filter(x=>x.trim()),tabRows=lines.map(x=>x.split(/\t+| {7,}/).map(tidyText));let multi=tabRows.filter(r=>r.filter(Boolean).length>=2).length;if(multi>=3&&multi>=Math.ceil(lines.length/2))sources=rowsToSources(tabRows,name);else sources=[{name,text:raw}]}else sources=rowsToSources(parseCsvRows(raw,ext==='tsv'?'\t':','),name)}
+   else if(ext!=='pdf')throw Error('지원하지 않는 파일 형식입니다.');
+   let groups=parsedGroups||[];if(!parsedGroups)for(let source of sources)groups.push(...linesToGroups(source.text,source.name));groups=groups.filter(g=>g.items.length);
+   if(!groups.length)throw Error('문장을 찾지 못했습니다. 표나 머리글이 복잡할 수 있으니 텍스트로 변환하거나 직접 등록해 주세요.');
+   pendingImport=groups.map(g=>({...g,items:g.items.map(a=>[...a])}));pendingAudit=createImportAudit(sources,groups,f);renderImportAudit();
+   if(groups.length===1)pendingImport[0].name=name;
+   $('importPreview').classList.remove('hidden');$('importEditor').classList.remove('hidden');$('saveImport').classList.remove('hidden');
+   displayImportEditor(0);
+   let count=groups.reduce((s,g)=>s+g.items.length,0);
+   status.textContent='📑 '+groups.length+'묶음 · '+count+'문제 자동 추출. '+pendingAudit.warnings.length+'건의 검토 알림이 있습니다. 원본 추출 내용과 대조하고 확인란에 표시해야 저장됩니다.';
+ }catch(err){pendingAudit=null;releasePdfOriginal();status.textContent='⚠️ '+err.message}
+}
+function commitImport(){
+ if(!pendingImport)return;syncImportEditor();if(!$('importVerify').checked){alert('원본 추출 내용과 모든 문제를 비교한 뒤 검수 확인란을 선택해 주세요.');$('importSourceReview').open=true;$('importVerify').focus();return}const valid=pendingImport.filter(g=>g.items.length&&g.name.trim());
+ if(valid.length!==pendingImport.length){alert('문장이 없는 묶음이 있습니다. 내용을 입력하거나 해당 묶음을 삭제해 주세요.');return}
+ let count=0;for(const g of valid){let id='pack-'+Date.now().toString(36)+'-'+(count++);db.packs.push({id,name:g.name,items:g.items})}
+ db.settings.bank='custom';db.settings.pack=db.packs[db.packs.length-1].id;db.settings.mode='exam';db.settings.order='sequential';db.settings.count='all';
+ pendingImport=null;pendingAudit=null;resetImportVerification();releasePdfOriginal();$('importSourceText').textContent='';$('importAuditStatus').textContent='';$('importPreview').textContent='';$('importGroupText').value='';$('importGroupName').value='';$('importGroupSelect').replaceChildren();$('saveImport').classList.add('hidden');$('importPreview').classList.add('hidden');$('importEditor').classList.add('hidden');
+ persist();renderPackOptions();setStatus('✅ '+count+'개 묶음 저장 완료. 원하는 단·장·단계·급수를 골라 시험을 볼 수 있습니다.');$('importStatus').textContent='문제 저장을 완료했어요. 학습 메뉴에서 묶음을 골라 시험을 시작하세요.';
+}
+function deletePack(){let id=$('packManage').value;if(!id)return;let pack=db.packs.find(p=>p.id===id);if(!pack||!confirm('「'+pack.name+'」 문제 묶음을 삭제할까요? 학습 기록은 유지됩니다.'))return;db.packs=db.packs.filter(p=>p.id!==id);if(db.settings.pack===id)db.settings.pack='manual';persist();renderPackOptions();setStatus('선택한 문제 묶음을 삭제했습니다.')}
+
+
+// v1.6.1: independent word-catching game, shares selected bank/order/voice only.
+const GAME_NEAR={
+ '않':['안','앉','앙'], '안':['않','앉','앙'],'떻':['덕','덧','떡'], '어':['어','여','아'],'게':['개','께','계'],'개':['게','게','걔'],
+ '돼':['되','대','데'],'되':['돼','데','대'],'에':['애','의','예'],'애':['에','예','얘'],'예':['에','애','얘'],
+ '읽':['익','일','잃'],'잃':['읽','일','익'],'잊':['있','잃','잇'],'있':['잊','잇','이'],'없':['업','엎','얻'],
+ '갔':['같','갓','갖'],'같':['갔','갓','갖'],'썼':['썻','섰','쓸'],'었':['엇','았','였'],
+ '었':['엇','았','였'],'꽁':['공','콩','꼼'],'뿌':['부','푸','쁘'],'든':['던','돈','든'],
+ '느':['누','너','니'],'낮':['낫','낯','낚'],'낫':['낮','낯','낟'],
+ '깨':['개','께','게'],'께':['게','깨','개'],'밟':['발','밥','밝'],'짧':['잘','잡','짭'],
+ '맞':['맏','맛','맙'],'닦':['닥','닭','딱'],'꽃':['꼿','꽂','꼭'], '기':['끼','키','게'],
+ '의':['이','에','으'],'이':['의','히','니'],'히':['이','해','희'],'다':['따','타','대'],
+ '더':['덜','도','대'],'한':['함','안','항'],'걸':['껄','걸','건'], '거':['꺼','게','것'],
+ '수':['쑤','쏘','소'],'를':['을','률','러'], '을':['를','얼','울'],
+ ' ' : [' '], '?':['!','.'], '.':['!','?'], '!':['?','.']
+};

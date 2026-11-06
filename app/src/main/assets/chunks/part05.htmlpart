@@ -1,0 +1,200 @@
+ {id:'forget',tag:'잃다와 잊다',re:/잊(?:다|어|었|지|는|고|으면)/g,tip:'「잊다」는 기억하지 못한다는 뜻이에요. 기억을 잊어버렸다고 생각하면 「잃다」와 구별하기 쉬워요.'},
+ {id:'geoyeyo',tag:'거예요',re:/거예요/g,tip:'「거예요」가 맞아요. 「것이에요」를 줄인 말이에요. 「거에요」로 쓰지 않아요.'},
+ {id:'doe',tag:'돼·되',re:/돼(?:요|서|야|도|(?=$|[^가-힣]))/g,tip:'「돼」는 「되어」를 줄인 말이에요. 「되어」로 바꾸어 뜻이 자연스러운지 확인해 봐요.'},
+ {id:'doe2',tag:'돼·되',re:/되(?:고|면|어서|었다|었다|었습니다|는|었|자|니)/g,tip:'「되다」의 「되」와 「되어」가 줄어든 「돼」를 구별해 봐요. 「되어」로 바꿔서 문장이 자연스러운지 확인해요.'},
+ {id:'eotteoke',tag:'어떻게',re:/어떻게/g,tip:'「어떻게」는 방법을 물을 때 써요. 「어떻게 해?」는 「어떡해?」로 줄일 수 있어요.'},
+ {id:'eotteokhae',tag:'어떡해',re:/어떡해/g,tip:'「어떡해」는 「어떻게 해」가 줄어든 말이에요. 「어떻게」와 「어떡해」의 뜻과 문장 자리를 비교해 보세요.'},
+ {id:'such',tag:'의존 명사 띄어쓰기',re:/(?:할|갈|볼|먹을|읽을|쓸|볼)\s+수/g,tip:'「수」는 혼자 쓰는 명사처럼 앞말과 띄어요. 「할 수 있어요」처럼 적어요.'},
+ {id:'thing',tag:'거 띄어쓰기',re:/\S+\s+거예요/g,tip:'「거」는 「것」을 줄인 말이에요. 「할 거예요」처럼 앞말과 띄어 씁니다.'},
+ {id:'times',tag:'단위 명사 띄어쓰기',re:/(?:한|두|세|네|몇|다섯|여섯|일곱|열)\s+(?:켤레|자루|통|개|마리|권|그루|명|번|장|잔)/g,tip:'수량을 세는 「켤레·자루·개·마리」 같은 단위 명사는 앞의 수 말과 띄어 씁니다. 「한 켤레」라고 써요.'},
+ {id:'clean',tag:'-이·-히',re:/깨끗이/g,tip:'「깨끗이」는 「이」로 적어요. 「깨끗하다 → 깨끗이」를 짝지어 외워 보세요.'},
+ {id:'day',tag:'며칠',re:/며칠/g,tip:'날짜를 물을 때는 「며칠」이라고 써요. 「몇일」이 아니에요.'},
+ {id:'guess',tag:'왠지·웬',re:/왠지/g,tip:'「왠지」는 「왜인지」가 줄어든 말이에요. 이유 없이 그런 느낌이 들 때 쓰는 말이지요.'},
+ {id:'wen',tag:'왠지·웬',re:/웬\s*\S+/g,tip:'「웬」은 「어찌 된」이라는 뜻이에요. 「웬일이야?」처럼 쓰고, 「왠지」와 구별해요.'},
+ {id:'not',tag:'안·않',re:/않(?:다|아|아서|고|았|을|는|습니다|으면)/g,tip:'「않다」는 「아니하다」의 준말이에요. 「하지 않았다」처럼 앞의 행동을 부정할 때 쓰는 경우가 많아요.'},
+ {id:'an',tag:'안·않',re:/안\s+(?:돼|되|먹|가|했|해|할|됩니다|좋|될)/g,tip:'「안」은 「아니」의 준말이에요. 「안 돼」처럼 뒤에 오는 말과 띄어 씁니다.'},
+ {id:'pron',tag:'소리와 표기',re:/(?:꽃향기|꽃이|꽃을|꽃에|밖에|깎아|깎았)/g,tip:'받침이 뒤의 소리와 이어지거나 발음이 달라질 수 있어요. 귀로 들리는 소리만 쓰지 말고 낱말의 원래 모양을 기억해요.'},
+ {id:'red',tag:'색깔 표현',re:/빨갛(?:게|다|고|아|은)/g,tip:'「빨갛게」의 「ㅎ」 받침을 기억해요. 「빨갛다」를 떠올리면 쉬워요.'},
+ {id:'kkum',tag:'꿈·꿉니다',re:/꿈(?:을|이|에)?\s*꿉니다/g,tip:'「꿈을 꿉니다」는 「꿈」과 「꾸다」를 연결해 생각해 보세요. 겹치는 된소리에 주의해요.'},
+ {id:'poss',tag:'-을 때',re:/(?:갈|볼|읽을|건널|쉴|먹을)\s+때/g,tip:'시간을 뜻하는 「때」는 앞말과 띄어요. 「갈 때」, 「먹을 때」라고 써요.'},
+ {id:'choppy',tag:'받침과 된소리',re:/(?:갔어요|봤어요|왔어요|먹었어요|썼어요|했어요)/g,tip:'지난 일을 나타내는 「-았어요 / -었어요」를 생각해 보세요. 소리를 천천히 나누고 받침 ㅆ을 확인해요.'},
+ {id:'together',tag:'띄어쓰기',re:/(?:것\s+같|수\s+있|수\s+없|할\s+텐데|혼날\s+텐데)/g,tip:'「수」, 「것」, 「터(텐데)」 같은 의존 명사는 앞말과 띄어 쓰는 경우가 많아요. 문장에서 덩어리로 기억해요.'},
+ {id:'ye',tag:'예요·이에요',re:/(?:이에요|예요)/g,tip:'「이에요」는 보통 받침이 있는 명사 뒤, 「예요」는 받침 없는 명사 뒤에 붙어요. 다만 「아니에요」처럼 특별히 기억할 형태도 있어요.'},
+ {id:'breathe',tag:'표기와 발음',re:/(?:넣었|좋아요|좋은|많이)/g,tip:'ㅎ 받침은 소리로 잘 들리지 않을 수도 있어요. 「넣다」, 「좋다」, 「많다」처럼 낱말의 기본형을 함께 기억해요.'},
+];
+// v1.6.5: Explain the *same context-linked orthography traps* the game uses.
+// Each guide names the contrast, a short decision rule, and a memory example.
+// A source can include a valid alternative with another meaning; the explanation
+// must never call all alternatives universally wrong.
+const SPELL_TRAP_TIP_GUIDES=[
+ {forms:['어떻게','어떡해'],tag:'어떻게 / 어떡해',tip:'방법을 묻거나 다음에 행동이 이어지면 「어떻게」예요. 「어떻게 해」를 줄여 말하면 「어떡해」예요. 예: 어떻게 만들지? / 이제 어떡해?'},
+ {forms:['며칠','몇일'],tag:'며칠 / 몇일',tip:'날짜나 기간을 물을 때 표준 표기는 항상 「며칠」이에요. 「몇일」이라고 쓰지 않아요. 예: 오늘이 며칠이지?'},
+ {forms:['왠지','웬지'],tag:'왠지 / 웬지',tip:'「왠지」는 「왜인지」의 준말이에요. 「왜인지」로 바꿔 자연스러우면 「왠지」! 예: 왠지 기분이 좋아.'},
+ {forms:['웬일','왠일','웬만','왠만','웬','왠'],tag:'웬 / 왠',tip:'「웬」은 「어찌 된」이라는 뜻이에요. 「웬일」, 「웬만하면」은 ㅔ, 「왜인지」가 줄어든 「왠지」만 ㅐ를 기억해요.'},
+ {forms:['금세','금새'],tag:'금세 / 금새',tip:'「금세」는 「금시에」가 줄어든 말이라 ㅔ예요. 「금새」가 아니라 「금세 끝났어」라고 적어요.'},
+ {forms:['아니에요','아니예요'],tag:'아니에요 / 아니예요',tip:'「아니다」 뒤에는 「아니에요」예요. 「아니예요」라고 쓰지 않아요. 「아니에요」의 에를 기억해요.'},
+ {forms:['설거지','설겆이'],tag:'설거지 / 설겆이',tip:'그릇을 씻는 일은 「설거지」예요. 「설겆이」가 아니라 받침 없는 「거」를 써요.'},
+ {forms:['오랜만','오랫만'],tag:'오랜만 / 오랫만',tip:'「오래간만」이 줄어 「오랜만」이 돼요. 받침은 ㄴ! 예: 오랜만에 만나서 반가워.'},
+ {forms:['역할','역활'],tag:'역할 / 역활',tip:'맡은 임무는 「역할」이에요. 「역활」이 아니라 마지막 글자가 「할」이에요.'},
+ {forms:['개수','갯수'],tag:'개수 / 갯수',tip:'물건의 수를 나타내는 말은 「개수」예요. 「갯수」처럼 사이시옷을 넣지 않아요.'},
+ {forms:['눈곱','눈꼽'],tag:'눈곱 / 눈꼽',tip:'눈에 끼는 것은 「눈곱」이에요. 소리가 세게 들려도 「곱」에 ㅂ 받침을 써요.'},
+ {forms:['어이없','어의없'],tag:'어이없다 / 어의없다',tip:'너무 뜻밖이라 말이 안 나올 때는 「어이없다」예요. 「어의없다」라고 쓰지 않아요.'},
+ {forms:['거예요','거에요'],tag:'거예요 / 거에요',tip:'「것이에요」가 줄어 「거예요」가 돼요. 예: 내일 갈 거예요. 「거에요」가 아니에요.'},
+ {forms:['할게','갈게','올게','볼게','줄게','할께','갈께','올께','볼께','줄께'],tag:'-ㄹ게 / -ㄹ께',tip:'내가 하겠다고 약속할 때는 「-ㄹ게」를 써요. [께]처럼 들려도 「할게, 갈게, 볼게」예요. 「선생님께」의 께와 구별해요.'},
+ {forms:['돼요','되요','돼서','되서','돼야','되야','됐어','됬어','됐다','됬다','돼','되'],tag:'되 / 돼',tip:'「돼」는 「되어」의 준말이에요. 「되어」를 넣어 자연스러우면 「돼」! 예: 해도 돼요(되어요) / 잘되면 좋아요. 「되요」 대신 「돼요」.'},
+ {forms:['봬요','뵈요'],tag:'봬요 / 뵈요',tip:'「봬요」는 「뵈어요」가 줄어든 말이에요. 「내일 봬요」가 맞고 「내일 뵈요」는 아니에요.'},
+ {forms:['깨끗이','깨끗히'],tag:'깨끗이 / 깨끗히',tip:'「깨끗하다」에서 나온 부사는 「깨끗이」예요. 「깨끗히」가 아니에요. 끝의 ‘이’를 기억해요.'},
+ {forms:['솔직히','솔직이'],tag:'솔직히 / 솔직이',tip:'「솔직하다」에서 나온 말은 「솔직히」예요. 예: 솔직히 말할게. 끝에 ‘히’를 써요.'},
+ {forms:['일일이','일일히'],tag:'일일이 / 일일히',tip:'하나하나 빠짐없이라는 뜻은 「일일이」예요. 「일일히」라고 쓰지 않아요.'},
+ {forms:['곰곰이','곰곰히'],tag:'곰곰이 / 곰곰히',tip:'차근차근 깊이 생각할 때는 「곰곰이」예요. 끝은 ‘이’! 예: 곰곰이 생각해 봐.'},
+ {forms:['꼼꼼히','꼼꼼이'],tag:'꼼꼼히 / 꼼꼼이',tip:'빈틈없이 자세히 할 때는 「꼼꼼히」예요. 예: 꼼꼼히 읽어 봐. 끝은 ‘히’!' },
+ {forms:['어쨌든','어쨋든'],tag:'어쨌든 / 어쨋든',tip:'「어쨌든」에는 ㅆ 받침이 있어요. ‘어쨌든 해 보자’라고 외워요.'},
+ {forms:['햇빛','해빛','햇볕','해볕'],tag:'햇빛 / 햇볕',tip:'「햇빛」과 「햇볕」에는 사이시옷 ㅅ이 있어요. 「해빛」, 「해볕」이라고 적지 않아요.'},
+ {forms:['찌개','찌게'],tag:'찌개 / 찌게',tip:'먹는 음식은 「찌개」예요. 「찌게」가 아니라 ㅐ! 예: 된장찌개.'},
+ {forms:['베개','베게'],tag:'베개 / 베게',tip:'잠잘 때 머리를 받치는 것은 「베개」예요. 「베게」가 아니라 ㅐ! 예: 베개를 베다.'},
+ {forms:['떡볶이','떡복이'],tag:'떡볶이 / 떡복이',tip:'「떡볶이」는 「볶다」에서 온 말이에요. 「볶」에 ㄲ 받침이 있다는 것을 기억해요.'},
+ {forms:['반드시','반듯이'],tag:'반드시 / 반듯이',tip:'「반드시」는 꼭! 「반듯이」는 비뚤어지지 않게 똑바로! 예: 반드시 약속을 지켜 / 반듯이 앉아.'},
+ {forms:['가르치','가리키'],tag:'가르치다 / 가리키다',tip:'공부나 방법을 알려 주면 「가르치다」, 손가락 등으로 방향을 짚으면 「가리키다」예요.'},
+ {forms:['부치','붙이'],tag:'부치다 / 붙이다',tip:'편지를 보내거나 부침개를 만들 때는 「부치다」, 종이나 스티커를 딱 붙게 하면 「붙이다」예요.'},
+ {forms:['늘리','늘이'],tag:'늘리다 / 늘이다',tip:'수나 양을 많게 하면 「늘리다」, 길이나 시간을 길게 하면 「늘이다」예요. 예: 인원을 늘리다 / 고무줄을 늘이다.'},
+ {forms:['로서','로써'],tag:'-로서 / -로써',tip:'자격이나 신분은 「-로서」(학생으로서), 도구·수단은 「-로써」(말로써 마음을 전하다)예요.'},
+ {forms:['띄','띠'],tag:'띄다 / 띠다',tip:'눈에 잘 보이면 「눈에 띄다」, 빛이나 표정 등을 지니면 「띠다」예요. 예: 미소를 띠다.'},
+ {forms:['맞히','맞추'],tag:'맞히다 / 맞추다',tip:'정답을 알아내거나 과녁에 적중하면 「맞히다」, 서로 비교하거나 가지런히 하면 「맞추다」예요. 예: 정답을 맞히다 / 답을 맞춰 보다.'},
+ {forms:['잃어','잊어'],tag:'잃다 / 잊다',tip:'물건을 없어지게 하면 「잃다」, 기억을 못 하면 「잊다」예요. 예: 우산을 잃어버렸어 / 약속을 잊어버렸어.'},
+ {forms:['낫다','낳다'],tag:'낫다 / 낳다',tip:'병이 좋아지거나 비교해 더 좋으면 「낫다」, 아기나 알을 세상에 나오게 하면 「낳다」예요.'},
+ {forms:['이따가','있다가'],tag:'이따가 / 있다가',tip:'조금 뒤에 할 일은 「이따가」, 어떤 곳에 머무른 뒤 행동하면 「있다가」예요. 예: 이따가 만나 / 집에 있다가 나가.'},
+ {forms:['든지','던지'],tag:'-든지 / -던지',tip:'여러 가지 중 무엇을 골라도 되면 「-든지」, 지나간 일을 떠올리면 「-던지」예요. 예: 뭐든지 골라 / 얼마나 춥던지.'},
+ {forms:['그런데','그런대','한대','한데'],tag:'-데 / -대',tip:'다른 사람에게 들은 이야기를 전하면 「-대」(친구가 온대), 앞뒤 말을 잇거나 직접 느낀 일을 말하면 「-데」를 써요. 문장의 뜻부터 확인해요.'},
+ {forms:['안','않'],tag:'안 / 않',tip:'「안」은 「아니」의 준말이라 「안 가요」처럼 앞에 써요. 「않」은 「아니하-」의 준말이라 「가지 않아요」처럼 「-지 않-」에 써요.'}
+];
+// Keep explanation matching consistent with the game's source-phrase detection.
+function spellingTipMatches(sentence){
+ const words=String(sentence||'').normalize('NFC').match(/[가-힣]+/g)||[];
+ const hits=[];
+ for(const guide of SPELL_TRAP_TIP_GUIDES){
+  const found=guide.forms.some(form=>words.some(word=>{
+   if(form==='안')return word==='안';
+   if(form==='웬'||form==='왠')return word.startsWith(form)&&word!=='왠지';
+   // A root syllable inside an unrelated word is not a spelling trap:
+   // e.g. 오늘이 contains 늘이, but is not 늘이다.
+   if(['늘이','늘리','띠','띄'].includes(form))return word.startsWith(form);
+   return word.includes(form);
+  }));
+  const stemGe=guide.tag==='-ㄹ게 / -ㄹ께'&&words.some(word=>{const cs=Array.from(word);return cs.some((c,i)=>c==='게'&&i>0&&gameHangulParts(cs[i-1])?.t===8)});
+  if(found||stemGe)hits.push({id:'spelling:'+guide.tag,tag:'함정 구별 · '+guide.tag,tip:guide.tip});
+ }
+ return hits;
+}
+function learnTips(sentence,provided=''){
+ const out=[];if(provided&&provided.trim())out.push({id:'custom',tag:'학교 학습 포인트',tip:provided.trim()});
+ const traps=spellingTipMatches(sentence);
+ out.push(...traps);
+ // Avoid repeating the same concept when an exact contrast has its own tip.
+ const linked=new Set(traps.map(t=>t.tag));
+ for(const rule of RULES){
+  rule.re.lastIndex=0;
+  if(!rule.re.test(sentence))continue;
+  if((rule.id==='doe'||rule.id==='doe2')&&linked.has('함정 구별 · 되 / 돼'))continue;
+  if((rule.id==='eotteoke'||rule.id==='eotteokhae')&&linked.has('함정 구별 · 어떻게 / 어떡해'))continue;
+  if((rule.id==='lost'||rule.id==='forget')&&linked.has('함정 구별 · 잃다 / 잊다'))continue;
+  if((rule.id==='an'||rule.id==='not')&&linked.has('함정 구별 · 안 / 않'))continue;
+  if(rule.id==='geoyeyo'&&linked.has('함정 구별 · 거예요 / 거에요'))continue;
+  if(rule.id==='guess'&&(linked.has('함정 구별 · 왠지 / 웬지')||linked.has('함정 구별 · 웬 / 왠')))continue;
+  if(rule.id==='wen'&&linked.has('함정 구별 · 웬 / 왠'))continue;
+  if(rule.id==='day'&&linked.has('함정 구별 · 며칠 / 몇일'))continue;
+  out.push({id:rule.id,tag:rule.tag,tip:rule.tip});
+ }
+ if(!out.length)out.push({id:'general',tag:'기본 연습 방법',tip:'문장을 한 번 듣고, 정답을 보지 않은 채 다시 써 보세요. 틀린 낱말은 글자를 천천히 확인하고 잠시 후 다시 시험을 봐요.'});
+ return out.slice(0,6);
+}
+function renderRuleTips(actual=null){if(!session)return;let item=currentItem();let root=$('ruleTipArea');renderMistakeTips(root,item[0],item[1]||'',actual);root.classList.remove('hidden')}
+
+// v1.6.6 — shared, answer-aware mistake diagnosis. Unlike sentence-only tips,
+// these are selected from differences the learner ACTUALLY made. No API calls.
+function errorChars(value){return Array.from(normForMark(value).replace(/\s/g,''));}
+function errorOperations(expected,answer){
+ const a=errorChars(expected),b=errorChars(answer),n=a.length,m=b.length;
+ if(n*m>180000)return [];
+ const d=Array.from({length:n+1},()=>new Uint16Array(m+1));
+ for(let i=0;i<=n;i++)d[i][0]=i;
+ for(let j=0;j<=m;j++)d[0][j]=j;
+ for(let i=1;i<=n;i++)for(let j=1;j<=m;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+ const edits=[];let i=n,j=m;
+ while(i||j){
+  if(i&&j&&d[i][j]===d[i-1][j-1]+(a[i-1]===b[j-1]?0:1)){
+   if(a[i-1]!==b[j-1])edits.push({x:i-1,y:j-1,old:a[i-1],now:b[j-1]});i--;j--;
+  }else if(i&&d[i][j]===d[i-1][j]+1){edits.push({x:i-1,y:j,old:a[i-1],now:''});i--}
+  else{edits.push({x:i,y:j-1,old:'',now:b[j-1]});j--}
+ }
+ return edits.reverse();
+}
+function errorFormPositions(value,form){
+ // Find the displayed form in the actual Korean word. Short forms must not
+ // match inside unrelated words (안경 / 웬만한 / 오늘이, etc.).
+ const text=normForMark(value);const out=[];
+ let m;const re=/[가-힣]+/g;
+ while((m=re.exec(text))){let word=m[0],from=0,idx;
+  if(form==='안'&&word!=='안')continue;
+  if((form==='웬'||form==='왠')&&!word.startsWith(form))continue;
+  if(['늘이','늘리','띠','띄'].includes(form)&&!word.startsWith(form))continue;
+  while((idx=word.indexOf(form,from))>=0){out.push(text.slice(0,m.index+idx).replace(/\s/g,'').length);from=idx+1}
+ }
+ return out;
+}
+function diagnoseMistakes(expected,answer){
+ if(answer===null||answer===undefined)return [];
+ const a=normForMark(expected),b=normForMark(answer);
+ if(a===b)return [];
+ const edits=errorOperations(expected,answer),found=[];
+ const plainA=a.replace(/\s/g,''),plainB=b.replace(/\s/g,'');
+ const add=(obj)=>{if(!found.some(t=>t.id===obj.id))found.push(obj)};
+ if(plainA===plainB){add({id:'format:spacing',tag:'띄어쓰기',tip:'글자는 맞았어요. 낱말 사이의 빈칸을 확인하세요. 문장을 뜻이 통하는 덩어리로 나눠 다시 읽어 보세요.'});return found}
+ for(const guide of SPELL_TRAP_TIP_GUIDES){
+  let evidence=null;
+  for(const right of guide.forms){
+   for(const ip of errorFormPositions(expected,right)){
+    for(const wrong of guide.forms){if(wrong===right)continue;
+     for(const jp of errorFormPositions(answer,wrong)){
+      if(Math.abs(ip-jp)>Math.max(6,Math.abs(plainA.length-plainB.length)+3))continue;
+      if(edits.some(op=>op.x>=ip-1&&op.x<ip+right.length+1&&op.y>=jp-1&&op.y<jp+wrong.length+1)){
+       evidence={right,wrong};break;
+      }
+     }
+     if(evidence)break;
+    }
+    if(evidence)break;
+   }
+   if(evidence)break;
+  }
+  if(evidence)add({id:'spelling:'+guide.tag,tag:'실제 오답 · '+guide.tag,tip:guide.tip,contrast:evidence.right+' → '+evidence.wrong});
+ }
+ // The commonly misheard pronunciation itself is not valid written spelling.
+ for(const [right,wrong] of GAME_PHONETIC_PAIRS){
+  for(const [source,miss] of [[right,wrong],[wrong,right]]){
+   const src=errorFormPositions(expected,source),dst=errorFormPositions(answer,miss);
+   if(!src.length||!dst.length)continue;
+   if(src.some(i=>dst.some(j=>Math.abs(i-j)<=Math.max(6,Math.abs(plainA.length-plainB.length)+3)&&edits.some(op=>op.x>=i-1&&op.x<i+source.length+1&&op.y>=j-1&&op.y<j+miss.length+1)))){
+    const existing=learnTips(expected).find(t=>t.id!=='general'&&t.id!=='custom'&&(['read','lost','forget','pron','breathe','short','step','sick'].includes(t.id)));
+    add({id:'phonetic:'+source+'|'+miss,tag:'발음과 표기 · '+source,tip:existing?.tip||'소리 나는 대로만 쓰지 말고 낱말의 원래 글자와 받침을 기억해요. 「'+source+'」와 「'+miss+'」를 비교해 보세요.',contrast:source+' → '+miss});
+    break;
+   }
+  }
+ }
+ // Explain an actual vowel/final mismatch even when a newly imported school
+ // sentence has no matching dictionary entry.
+ if(!found.some(t=>t.id.startsWith('spelling:')||t.id.startsWith('phonetic:')))for(const e of edits){
+  const x=gameHangulParts(e.old),y=gameHangulParts(e.now);
+  if(!x||!y)continue;
+  if(x.l===y.l&&x.t===y.t&&[1,5].includes(x.v)&&[1,5].includes(y.v)){
+   add({id:'sound:ae-e',tag:'ㅐ / ㅔ 구별',tip:'ㅐ와 ㅔ는 소리가 비슷해도 낱말마다 바른 글자가 달라요. 정답 낱말을 뜻과 함께 기억하고 다시 써 보세요.'});
+  }else if(x.l===y.l&&x.v===y.v&&x.t!==y.t){
+   add({id:'sound:final',tag:'받침 구별',tip:'받침 소리가 비슷해도 실제 글자는 다를 수 있어요. 기본형이나 연결되는 다른 형태를 떠올리며 받침을 확인해요.'});
+  }else if(x.l===y.l&&x.v!==y.v){
+   add({id:'sound:vowel',tag:'모음 구별',tip:'비슷한 모음을 섞어 쓴 부분이 있어요. 소리뿐 아니라 낱말의 뜻과 정확한 글자 모양을 함께 기억해요.'});
+  }else if(x.l!==y.l){
+   add({id:'sound:consonant',tag:'자음 구별',tip:'소리가 비슷한 자음으로 바꾸어 쓴 부분이 있어요. 첫소리와 받침을 나누어 천천히 확인해요.'});
+  }
+ }
+ if(!found.length)add({id:'general:letters',tag:'빠뜨리거나 바뀐 글자',tip:'정답과 쓴 문장을 나란히 보고 빠진 글자와 순서를 찾아보세요. 틀린 부분을 가리고 다시 써 보면 더 오래 기억할 수 있어요.'});
+ if(a.replace(/\s/g,'')!==b.replace(/\s/g,'')&&a.includes(' ')!==b.includes(' ')){
+  add({id:'format:spacing',tag:'띄어쓰기',tip:'글자와 띄어쓰기를 따로 확인하세요. 앞뒤 낱말이 어디서 끊기는지 확인한 다음 다시 써 보세요.'});

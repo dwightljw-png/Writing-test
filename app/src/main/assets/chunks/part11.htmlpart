@@ -1,0 +1,200 @@
+ ['할게','할께'],['갈게','갈께'],['올게','올께'],['볼게','볼께'],['줄게','줄께'],
+ ['돼요','되요'],['돼서','되서'],['돼야','되야'],['됐어','됬어'],['됐다','됬다'],
+ ['봬요','뵈요'],['뵈요','봬요'],
+ ['깨끗이','깨끗히'],['솔직히','솔직이'],['일일이','일일히'],
+ ['곰곰이','곰곰히'],['꼼꼼히','꼼꼼이'],
+ ['어쨌든','어쨋든'],['햇빛','해빛'],['햇볕','해볕'],
+ ['찌개','찌게'],['베개','베게'],['떡볶이','떡복이'],
+ ['반드시','반듯이'],['반듯이','반드시'],
+ ['가르치','가리키'],['가리키','가르치'],
+ ['부치','붙이'],['붙이','부치'],['늘리','늘이'],['늘이','늘리'],
+ ['로서','로써'],['로써','로서'],['띄','띠'],['띠','띄'],
+ ['맞히','맞추'],['맞추','맞히'],
+ ['잃어','잊어'],['잊어','잃어'],
+ ['낫다','낳다'],['낳다','낫다'],
+ ['이따가','있다가'],['있다가','이따가'],
+ ['든지','던지'],['던지','든지'],
+ ['그런데','그런대'],['한대','한데'],
+ ['되','돼'],['돼','되'],['않','안'],['안','않'],
+ ['웬','왠'],['왠','웬']
+];
+function gameSpellingTrapGroups(sentence){
+ const words=String(sentence||'').normalize('NFC').match(/[가-힣]+/g)||[];
+ const source=new Set(Array.from(sentence).filter(c=>gameHangulParts(c)));
+ const seen=new Set();const groups=[];
+ // General grammatical trap: a syllable ending in ㄹ followed by -게
+ // (갈게, 먹을게, 볼게 ...) is often mistakenly written with 께.
+ for(const word of words){
+  const chars=Array.from(word);
+  for(let i=1;i<chars.length;i++){
+   if(chars[i]==='게' && gameHangulParts(chars[i-1])?.t===8 && !source.has('께') && !seen.has('께')){
+    seen.add('께');groups.push(['께']);
+   }
+  }
+ }
+ for(const [correct,confusing] of GAME_SPELLING_TRAPS.slice().sort((a,b)=>{const score=pair=>Math.max(0,...SPELL_TRAP_TIP_GUIDES.filter(g=>g.forms.includes(pair[0])&&g.forms.includes(pair[1])).map(g=>weaknessStrength('spelling:'+g.tag)));return score(b)-score(a)})){
+  let matched=false;
+  for(const word of words){
+   if(correct==='안' && word!=='안')continue; // '안경'에는 '않' 함정을 넣지 않는다.
+   if(correct==='왠' && !word.startsWith('왠'))continue;
+   if(correct==='웬' && !word.startsWith('웬'))continue;
+   if(word.includes(correct)){matched=true;break;}
+  }
+  if(!matched)continue;
+  // The whole alternative must be representable from the correct tiles plus
+  // these new cards. Keep two-syllable traps together (e.g. 며칠 -> 몇일).
+  const chars=[...new Set(Array.from(confusing).filter(c=>gameHangulParts(c)&&!source.has(c)))];
+  const fresh=chars.filter(c=>!seen.has(c));
+  if(!fresh.length)continue;
+  fresh.forEach(c=>seen.add(c));groups.push(fresh);
+ }
+return groups;
+}
+
+function gameTokens(sentence){
+ // Spaces are NOT floating tiles. The child leaves actual cells empty.
+ const needed=Array.from(String(sentence||'').normalize('NFC')).filter(c=>! /\s/.test(c));
+ const targetExtras=Math.ceil(needed.length*.5);
+ const extras=[],occupied=new Set(needed);
+ function addExtra(ch){
+  if(!ch||ch===' '||occupied.has(ch))return false;
+  extras.push(ch);occupied.add(ch);return true;
+ }
+ // Mandatory contrasts: ㅐ↔ㅔ and a *different* final consonant for every
+ // distinct source syllable that contains a 받침. These take priority over the
+ // approximate 1.5x card budget.
+ const unique=[...new Set(needed)];
+ for(const ch of unique){const ae=gameVowelConfusion(ch);if(ae)addExtra(ae)}
+ for(const ch of unique){for(const alt of gameFinalConfusions(ch)){if(addExtra(alt))break}}
+ // Prioritize genuine spelling-confusion words before generic random decoys.
+ // Keep paired replacements together; do not let a small budget create a
+ // half-available spelling trap such as 며칠 -> 몇 but no 일.
+ const trapBudget=Math.max(2,Math.min(12,Math.ceil(needed.length*.26)+(mistakePriority(sentence)>0?3:0)));
+ let trapAdded=0;
+ for(const group of gameSpellingTrapGroups(sentence)){
+  const fresh=group.filter(ch=>!occupied.has(ch));
+  if(!fresh.length)continue;
+  if(trapAdded>0 && trapAdded+fresh.length>trapBudget)continue;
+  for(const ch of fresh){if(addExtra(ch))trapAdded++}
+  if(trapAdded>=trapBudget)break;
+ }
+ // Spoken vs written Korean contrasts are high-priority too (읽어/일거, 갈아/가라).
+ // We deliberately do NOT expose the expected sentence or create an exact slot template.
+ // Two-character pronunciation contrasts are always possible even for tiny words.
+ // For long sentences, keep close to the original ~1.5x tile count rather than
+ // creating a disproportionate number of sound-alike distractors.
+ const phoneticLimit=Math.max(2,Math.min(8,Math.ceil(needed.length*.35)+2));
+ let phoneticAdded=0;
+ for(const alt of gamePhoneticDecoys(sentence)){
+  if(phoneticAdded>=phoneticLimit)break;
+  if(addExtra(alt))phoneticAdded++;
+ }
+ // Remaining cards are context-linked near misses, shuffled each question.
+ const inContext=shuffle(unique.flatMap(gameOtherConfusions));
+ for(const opt of inContext){if(extras.length>=targetExtras)break;addExtra(opt)}
+ // Very short or simple sentences still receive an approximate 1.5x pool.
+ if(extras.length<targetExtras){
+  for(const opt of shuffle(GAME_GENERIC.filter(c=>c!==' '))){if(extras.length>=targetExtras)break;addExtra(opt)}
+ }
+ return shuffle(needed.map(char=>({char,distractor:false})).concat(extras.map(char=>({char,distractor:true})))).map((t,i)=>({id:'t'+i,...t}));
+}
+// Extra writing room in chunks: no slot count or word boundaries reveal the answer.
+function gameSlotCapacity(sentence){
+ const letters=Array.from(sentence).filter(c=>! /\s/.test(c)).length;
+ const estimate=letters+Math.ceil(letters*.3)+Math.max(6,Math.ceil(letters*.15));
+ return Math.max(24,Math.ceil(estimate/8)*8);
+}
+function gameAddSlots(n=8){
+ if(!game)return;const start=game.slots.length;
+ for(let i=0;i<n;i++){
+  game.slots.push(null);const b=document.createElement('button');b.type='button';
+  b.className='gameSlot';b.dataset.index=start+i;b.setAttribute('aria-label',(start+i+1)+'번째 칸 비어 있음');
+  b.title='이 칸을 눌러 다음 글자를 넣을 위치를 정해요';$('gameSlots').append(b);
+ }
+}
+function gameCleanupFx(){if(gameFxTimeout){clearTimeout(gameFxTimeout);gameFxTimeout=null;}$('gameCelebrate').classList.add('hidden');$('gameCelebrate').replaceChildren();const txt=document.createElement('div');txt.className='gameWinText';txt.textContent='🎉 100점 만점! 🎉';$('gameCelebrate').append(txt)}
+function gameExit(){stopSpeech();gameStopChase();gameDrag=null;gameCleanupFx();game=null;$('gameArea').classList.add('hidden');$('gameQuestion').classList.remove('hidden');$('gameSummary').classList.add('hidden');$('gameSlots').replaceChildren();$('gamePool').replaceChildren();$('setupArea').classList.remove('hidden');refreshHome()}
+function gameStart(){
+ syncSettings();const data=getBank();if(!data.length){alert('등록된 문장이 없습니다. 보호자 메뉴에서 문제를 등록해 주세요.');return;}
+ // Unlike handwriting mode, the word game never needs an OCR API key.
+ const items=(db.settings.order==='random'?shuffle(data):data).map(item=>[...item]);
+ game={items,bank:db.settings.bank,profile:db.profile,at:0,results:[],firstFailed:[],solved:false,attemptedWrong:false,tiles:[],slots:[],entered:[],hintShown:false,errorDraft:null};
+ $('setupArea').classList.add('hidden');$('studyArea').classList.add('hidden');$('gameArea').classList.remove('hidden');$('gameSummary').classList.add('hidden');$('gameQuestion').classList.remove('hidden');gameQuestion();
+}
+function gameQuestion(){
+ if(!game)return;gameStopChase();stopSpeech();gameDrag=null;game.solved=false;game.attemptedWrong=false;game.hintShown=false;game.errorDraft=null;
+ const item=game.items[game.at],text=gameSentence(item[0]);game.tiles=gameTokens(text);game.slots=[];game.cursor=0;game.baseSlots=gameSlotCapacity(text);game.entered=[];
+ $('gameProgress').textContent=(game.at+1)+' / '+game.items.length;
+ $('gameScore').textContent='현재 '+Math.round(game.results.filter(Boolean).length/game.items.length*100)+'점';
+ $('gameProgressFill').style.width=(game.at/game.items.length*100)+'%';
+ $('gameCheck').classList.remove('hidden');$('gameSkip').classList.remove('hidden');$('gameNext').classList.add('hidden');
+ $('gameFeedback').classList.add('hidden');$('gameFeedback').classList.remove('good');$('gameFeedback').replaceChildren();
+ const root=$('gameSlots');root.replaceChildren();gameAddSlots(game.baseSlots);
+ const pool=$('gamePool');pool.replaceChildren();
+ game.tiles.forEach((tile,i)=>{
+  const b=document.createElement('button');b.type='button';b.className='gameTile';
+  if(tile.distractor)b.classList.add('distractor');b.dataset.tileId=tile.id;const face=document.createElement('span');face.className='gameTileFace';face.textContent=gameTokenLabel(tile.char);b.append(face);
+  b.setAttribute('aria-label',tile.char+' 글자');
+  b.style.setProperty('--float-duration',(2.3+(i*17%11)*.16)+'s');b.style.setProperty('--float-delay',(-i*.23)+'s');pool.append(b);
+ });
+ gameSyncTiles();gameStartChase();speak(text);
+}
+function gameSyncTiles(){
+ if(!game)return;const used=new Set(game.slots.filter(Boolean));
+ [...$('gamePool').children].forEach(b=>{const yes=used.has(b.dataset.tileId);b.classList.toggle('used',yes);b.disabled=yes});
+ const boxes=$('gameSlots').children;
+ // A gap counts as whitespace only when there are written letters on BOTH
+ // sides. Trailing cells are just spare writing room.
+ const first=game.slots.findIndex(Boolean),last=game.slots.findLastIndex(Boolean);
+ for(let i=0;i<game.slots.length;i++){
+  const b=boxes[i],t=game.tiles.find(v=>v.id===game.slots[i]);
+  b.textContent=t?t.char:'';b.classList.toggle('filled',!!t);
+  b.classList.toggle('spaceFilled',!t&&i>first&&i<last);
+  b.classList.toggle('gameCursor',!game.solved&&i===game.cursor);
+  b.setAttribute('aria-label',(i+1)+'번째 칸 '+(t?t.char+' · 눌러서 지우기':i>first&&i<last?'띄어쓰기 빈칸 · 누르면 여기부터 쓰기':'비어 있음 · 누르면 이 칸부터 쓰기'));
+ }
+ $('gameFillCount').textContent=game.slots.filter(Boolean).length+'글자 배치 · 빈칸은 띄어쓰기';
+ $('gameTileCount').textContent=game.tiles.length+'개 글자';
+ $('gameCheck').disabled=game.solved||!game.slots.some(Boolean);
+}
+function gamePlace(id,targetIndex){
+ if(!game||game.solved)return;const tile=game.tiles.find(x=>x.id===id);if(!tile||game.slots.includes(id))return;
+ let idx=Number.isInteger(targetIndex)&&targetIndex>=0?targetIndex:game.cursor;
+ if(idx>=game.slots.length)gameAddSlots(8);
+ if(game.slots[idx]!==null){const was=game.slots[idx];game.entered=game.entered.filter(k=>k!==was)}
+ game.slots[idx]=id;game.entered=game.entered.filter(k=>k!==id);game.entered.push(id);
+ game.cursor=idx+1;if(game.cursor>=game.slots.length)gameAddSlots(8);
+ gameSyncTiles();
+}
+function gameRemove(index){
+ if(!game||game.solved||index<0||index>=game.slots.length)return;
+ const old=game.slots[index];if(!old){game.cursor=index;gameSyncTiles();return}
+ game.slots[index]=null;game.entered=game.entered.filter(x=>x!==old);game.cursor=index;gameSyncTiles();
+}
+function gameSkipCell(){
+ if(!game||game.solved)return;
+ game.cursor++;if(game.cursor>=game.slots.length)gameAddSlots(8);gameSyncTiles();
+}
+function gameUndo(){
+ if(!game||game.solved)return;
+ while(game.entered.length){const last=game.entered.pop(),idx=game.slots.indexOf(last);
+  if(idx>=0){game.slots[idx]=null;game.cursor=idx;gameSyncTiles();break}}
+}
+function gameClear(){
+ if(!game||game.solved)return;game.slots=[];game.cursor=0;game.entered=[];
+ $('gameSlots').replaceChildren();gameAddSlots(game.baseSlots);gameSyncTiles();
+}
+function gameShowFeedback(ok,body,includeTips=false){
+ const root=$('gameFeedback');root.replaceChildren();root.classList.toggle('good',!!ok);root.classList.remove('hidden');
+ const p=document.createElement('div');p.textContent=body;root.append(p);
+ if(includeTips){
+  const tips=prioritizedFeedback(game.items[game.at][0],game.items[game.at][1]||'',game.errorDraft).tips.slice(0,6);
+  for(const tip of tips){let box=document.createElement('div');box.className='gameTipText';box.style.marginTop='7px';box.textContent='💡 '+tip.tag+' — '+tip.tip;root.append(box);
+   let btn=document.createElement('button');btn.type='button';btn.className='btn soft';btn.style.cssText='padding:5px 10px;margin:5px 0 0;font-size:12px';btn.textContent='🔊 팁 듣기';btn.addEventListener('click',()=>speak(tip.tip));root.append(btn);}
+ }
+}
+function gameCheck(){
+ if(!game||game.solved||!game.slots.some(Boolean))return;
+ const actual=gameAnswerText(),expected=gameSentence(game.items[game.at][0]);
+ const ok=actual===expected;
+ if(!ok){game.attemptedWrong=true;if(game.errorDraft===null)game.errorDraft=actual;gameShowFeedback(false,'아쉬워요! 글자 순서나 띄어쓰기를 한 번 더 살펴보세요. 글자를 눌러 바꾸거나 다시 들을 수 있어요.',false);return;}

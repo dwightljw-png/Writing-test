@@ -1,0 +1,200 @@
+ gameSolved(!game.attemptedWrong,'🎉 맞았어요! '+(game.attemptedWrong?'다시 생각해서 멋지게 완성했어요.':'첫 번째 도전에서 성공했어요!'));
+}
+function gameSolved(firstOk,message){
+ if(!game||game.solved)return;game.solved=true;gameStopChase();
+ game.results.push(firstOk);if(!firstOk){game.firstFailed.push(game.items[game.at][0]);saveMistakeTypes(game.items[game.at][0],game.errorDraft,'game');persist()}else strengthenCorrectTypes(game.items[game.at][0]);
+ $('gameScore').textContent='현재 '+Math.round(game.results.filter(Boolean).length/game.items.length*100)+'점';
+ gameShowFeedback(!!firstOk,message+'\n정답: '+game.items[game.at][0],true);
+ $('gameCheck').classList.add('hidden');$('gameSkip').classList.add('hidden');$('gameNext').classList.remove('hidden');
+ $('gameNext').textContent=game.at===game.items.length-1?'🏆 결과 확인하기':'다음 문제 →';gameSyncTiles();
+}
+function gameSkip(){if(!game||game.solved)return;game.attemptedWrong=true;gameSolved(false,'📖 정답을 확인하고 다음 문제에서 다시 해 봐요.');}
+function gameNext(){if(!game||!game.solved)return;game.at++;if(game.at>=game.items.length){gameFinish();return}gameQuestion()}
+function gameFinish(){
+ gameStopChase();stopSpeech();const good=game.results.filter(Boolean).length,total=game.items.length,score=Math.round(good/total*100);
+ $('gameQuestion').classList.add('hidden');$('gameSummary').classList.remove('hidden');$('gameProgressFill').style.width='100%';
+ $('gameProgress').textContent=total+' / '+total;$('gameScore').textContent='최종 '+score+'점';
+ $('gameFinishScore').textContent=score+'점';$('gameFinishTitle').textContent=score===100?'🌈 완벽해요!':'🎮 게임을 끝냈어요!';
+ $('gameFinishDescription').textContent=good+' / '+total+'문제를 첫 시도에 완성했어요. '+(score===100?'모든 문장을 첫 시도에 맞혔어요!':'조립이 어려웠던 문장은 다시 듣고 써 보세요.');
+ const mistakes=$('gameMistakes');mistakes.replaceChildren();if(game.firstFailed.length){let h=document.createElement('h3');h.textContent='🌱 다시 연습할 문장';mistakes.append(h);for(const txt of game.firstFailed){let d=document.createElement('div');d.textContent=txt;mistakes.append(d)}}
+ // Writing test records remain separate: arranging syllables is not handwriting.
+ if(!Array.isArray(db.gameHistory))db.gameHistory=[];
+ db.gameHistory.push({day:localDay(),profile:game.profile,bank:game.bank,pack:db.settings.pack,correct:good,total,score});
+ if(db.gameHistory.length>100)db.gameHistory.splice(0,db.gameHistory.length-100);persist();
+ gameRenderRecord();if(score===100)gameCelebrate();
+}
+function gameRenderRecord(){const el=$('gameHistory');if(!el)return;el.replaceChildren();const history=(db.gameHistory||[]).filter(r=>r.profile===db.profile).slice(-8).reverse();if(!history.length){el.textContent='아직 게임 기록이 없어요.';return}history.forEach(r=>{const d=document.createElement('div');d.className='listitem';d.textContent=r.day+' · '+r.correct+'/'+r.total+'문제 · '+r.score+'점';el.append(d)})}
+function gameCelebrate(){
+ gameCleanupFx();const fx=$('gameCelebrate');fx.classList.remove('hidden');
+ const palette=['#ffcc3d','#ff718d','#64e0cb','#8d80ff','#6bb9f5','#f89b4a'];
+ const mode=Math.floor(Math.random()*3);
+ // Finite particles from left and right; no perpetual RAF or interval.
+ for(let side of [0,1])for(let i=0;i<55;i++){
+  const el=document.createElement('div');el.className='gameConfetti'+(mode===1||i%5===0?' star':'');
+  el.style.setProperty('--burst-left',side?'95%':'5%');el.style.setProperty('--burst-top',(35+Math.random()*38)+'%');
+  el.style.setProperty('--burst-color',palette[Math.floor(Math.random()*palette.length)]);
+  const distance=35+Math.random()*Math.min(window.innerWidth*.45,390),angle=(-1+Math.random()*2)*Math.PI*.6;
+  const dx=(side?-1:1)*distance*(.75+Math.random()*.5),dy=mode===2?-(75+Math.random()*330):(-200+Math.random()*440);
+  el.style.setProperty('--burst-x',dx+'px');el.style.setProperty('--burst-y',dy+'px');
+  el.style.setProperty('--burst-rotate',(360+Math.random()*900)+'deg');el.style.setProperty('--burst-duration',(1.4+Math.random()*1.8)+'s');
+  el.style.animationDelay=(Math.random()*.38)+'s';fx.append(el);
+ }
+ gameFxTimeout=setTimeout(gameCleanupFx,4300);
+}
+function gameBind(){
+ const pool=$('gamePool'),slots=$('gameSlots');
+ pool.addEventListener('click',e=>{
+  if(!game||game.solved||gameDrag?.ignoreUntil>Date.now())return;
+  const tile=e.target.closest('.gameTile');if(tile)gamePlace(tile.dataset.tileId);
+ });
+ slots.addEventListener('click',e=>{const slot=e.target.closest('.gameSlot');if(slot)gameRemove(Number(slot.dataset.index))});
+ pool.addEventListener('pointerdown',e=>{
+  const t=e.target.closest('.gameTile');if(!game||game.solved||!t||e.button!==0||t.classList.contains('used'))return;
+  gameDrag={id:t.dataset.tileId,el:t,x:e.clientX,y:e.clientY,moved:false,ignoreUntil:0};
+  try{t.setPointerCapture(e.pointerId)}catch(_){ }
+ });
+ pool.addEventListener('pointermove',e=>{
+  if(!gameDrag||gameDrag.el!==e.target)return;
+  const dx=e.clientX-gameDrag.x,dy=e.clientY-gameDrag.y;
+  if(Math.hypot(dx,dy)>8)gameDrag.moved=true;
+  if(gameDrag.moved){gameDrag.el.classList.add('dragging');gameDrag.el.style.transform='translate3d('+dx+'px,'+dy+'px,0) scale(1.1)';}
+ });
+ function stopDrag(e){
+  const d=gameDrag;if(!d)return;
+  d.el.classList.remove('dragging');d.el.style.removeProperty('transform');
+  if(d.moved){
+   // get element under finger AFTER removing drag styles
+   const found=document.elementFromPoint(e.clientX,e.clientY),slot=found?.closest('.gameSlot');
+   gamePlace(d.id,slot?Number(slot.dataset.index):undefined);
+   gameDrag={ignoreUntil:Date.now()+320};setTimeout(()=>{if(gameDrag&&!gameDrag.id)gameDrag=null},350);
+  }else gameDrag=null;
+ }
+ pool.addEventListener('pointerup',stopDrag);pool.addEventListener('pointercancel',e=>{if(gameDrag?.el){gameDrag.el.classList.remove('dragging');gameDrag.el.style.removeProperty('transform')}gameDrag=null});
+ $('gameStartBtn').addEventListener('click',gameStart);
+ $('gameQuit').addEventListener('click',gameExit);
+ $('gameHome').addEventListener('click',gameExit);
+ $('gameReplay').addEventListener('click',()=>{gameExit();gameStart()});
+ $('gameListen').addEventListener('click',()=>{if(game)speak(game.items[game.at][0])});
+ $('gameSlow').addEventListener('click',()=>{if(game)speak(game.items[game.at][0],true)});
+ $('gameSpace').addEventListener('click',gameSkipCell);$('gameUndo').addEventListener('click',gameUndo);$('gameClear').addEventListener('click',gameClear);
+ $('gameCheck').addEventListener('click',gameCheck);$('gameSkip').addEventListener('click',gameSkip);$('gameNext').addEventListener('click',gameNext);
+ $('tabHome').addEventListener('click',()=>{if(game)gameExit()});
+ $('tabRecord').addEventListener('click',()=>{if(game)gameExit();gameRenderRecord()});
+ $('tabParent').addEventListener('click',()=>{if(game)gameExit()});
+ gameRenderRecord();
+}
+
+$('geminiKey').addEventListener('input',updateOcrHeader);$('ocrToggle').addEventListener('change',updateOcrHeader);$('gridPaperBtn').addEventListener('click',()=>setPaperStyle('grid'));$('linePaperBtn').addEventListener('click',()=>setPaperStyle('line'));$('handBatchPrev').addEventListener('click',handBatchPrev);$('handBatchNext').addEventListener('click',handBatchNext);$('handOcrSave').addEventListener('click',saveHandOcrGrade);$('handOcrRetrySame').addEventListener('click',retryStoredHandOCR);$('handOcrConnTest').addEventListener('click',()=>testHandOcrConnection('review'));$('handOcrConnTestParent').addEventListener('click',()=>testHandOcrConnection('parent'));
+$('tabHome').addEventListener('click',()=>showView('home'));$('tabRecord').addEventListener('click',()=>showView('record'));$('tabParent').addEventListener('click',()=>showView('parent'));$('bank').addEventListener('change',syncSettings);$('pack').addEventListener('change',syncSettings);$('order').addEventListener('change',syncSettings);$('count').addEventListener('change',syncSettings);$('mode').addEventListener('change',syncSettings);$('answerPref').addEventListener('change',syncSettings);$('profile').addEventListener('change',()=>{db.profile=$('profile').value;persist();refreshHome()});$('startBtn').addEventListener('click',start);$('coverBtn').addEventListener('click',startWriting);$('listenBtn').addEventListener('click',()=>speak(currentItem()[0]));$('slowBtn').addEventListener('click',()=>speak(currentItem()[0],true));$('quitBtn').addEventListener('click',quit);$('handMode').addEventListener('click',()=>setInputMode('hand'));$('typeMode').addEventListener('click',()=>setInputMode('type'));$('undoBtn').addEventListener('click',()=>{strokes.pop();repaint()});$('clearBtn').addEventListener('click',()=>{if(strokes.length&&confirm('지금 쓴 글씨를 모두 지울까요?')){strokes=[];repaint()}});$('checkBtn').addEventListener('click',check);$('selfYes').addEventListener('click',()=>handGrade(true));$('selfNo').addEventListener('click',()=>handGrade(false));$('retryNow').addEventListener('click',retryNow);$('nextBtn').addEventListener('click',advance);$('homeBtn').addEventListener('click',quit);$('paperNext').addEventListener('click',paperNext);$('paperPrevious').addEventListener('click',paperPrevious);$('paperGradeSave').addEventListener('click',savePaperGrade);$('retryWrong').addEventListener('click',beginRetry);$('saveCustom').addEventListener('click',saveCustom);$('useCustom').addEventListener('click',()=>{saveCustom();db.settings.bank='custom';db.settings.mode='exam';db.settings.pack='manual';persist();showView('home')});$('newProfile').addEventListener('keydown',e=>{if(e.key==='Enter')$('addProfile').click()});$('addProfile').addEventListener('click',()=>{let name=$('newProfile').value.trim();if(!name){alert('아이 이름이나 별명을 입력해 주세요.');return}if(db.profiles.includes(name)){alert('이미 있는 이름이에요.');return}db.profiles.push(name);db.profile=name;$('newProfile').value='';persist();updateProfiles();setStatus(name+' 학생을 추가했습니다.')});$('deleteProfile').addEventListener('click',()=>{if(!confirm(db.profile+' 학생의 학습 기록을 모두 지울까요? (문장 목록은 유지됩니다)'))return;delete db.stats[db.profile];if(db.weaknesses)delete db.weaknesses[db.profile];db.history=db.history.filter(x=>x.profile!==db.profile);db.gameHistory=(db.gameHistory||[]).filter(x=>x.profile!==db.profile);persist();setStatus('현재 학생의 학습 기록을 초기화했습니다.')});$('voiceRate').addEventListener('input',()=>{$('voiceRateText').textContent=$('voiceRate').value+'배'});$('voiceRate').addEventListener('change',()=>{db.settings.rate=Number($('voiceRate').value);persist()});$('punctuation').addEventListener('change',()=>{db.settings.punctuation=$('punctuation').checked;persist()});$('voiceSelect').addEventListener('change',()=>{db.settings.voice=$('voiceSelect').value;persist()});$('refreshVoices').addEventListener('click',refreshVoiceChoices);
+if('speechSynthesis' in window){speechSynthesis.addEventListener('voiceschanged',refreshVoiceChoices)}
+$('sampleVoice').addEventListener('click',()=>speak('안녕하세요. 오늘도 즐겁게 받아쓰기를 연습해요.'));$('backupBtn').addEventListener('click',()=>download('똑똑받아쓰기_백업_'+localDay()+'.json',JSON.stringify(db,null,2)));$('restoreBtn').addEventListener('click',()=>$('restoreInput').click());$('restoreInput').addEventListener('change',e=>{restoreFile(e.target.files[0]);e.target.value=''});
+$('pasteImportBtn').addEventListener('click',async()=>{let raw=$('pasteImportText').value;if(!raw.trim()){alert('분석할 내용을 붙여넣어 주세요.');return}let title=tidyText($('importName').value)||'붙여넣은 문장';await importFile(new File([raw],title+'.txt',{type:'text/plain'}));});$('importBtn').addEventListener('click',()=>$('importInput').click());$('importInput').addEventListener('change',async e=>{let f=e.target.files[0];e.target.value='';if(f)await importFile(f)});$('saveImport').addEventListener('click',commitImport);$('importGroupSelect').addEventListener('change',e=>{syncImportEditor();displayImportEditor(Number(e.target.value))});
+$('importGroupName').addEventListener('input',()=>{if(pendingImport){resetImportVerification();pendingImport[importEditorIndex].name=$('importGroupName').value;refreshImportSummary()}});
+$('importGroupText').addEventListener('input',()=>{if(pendingImport){resetImportVerification();syncImportEditor();refreshImportSummary()}});
+$('importAddGroup').addEventListener('click',()=>adjustImportGroup('add'));
+$('importSplitGroup').addEventListener('click',()=>adjustImportGroup('split'));
+$('importMergeGroup').addEventListener('click',()=>adjustImportGroup('merge'));
+$('importDeleteGroup').addEventListener('click',()=>adjustImportGroup('delete'));$('deletePack').addEventListener('click',deletePack);
+try{let probe=KEY+'_probe';localStorage.setItem(probe,'ok');let available=localStorage.getItem(probe)==='ok';localStorage.removeItem(probe);$('storageWarning').classList.toggle('hidden',available)}catch(e){$('storageWarning').classList.remove('hidden')}
+migratePackProgress();gameBind();setPaperStyle(db.settings.paperStyle==='line'?'line':'grid');updateOcrHeader();refreshHome();
+})();
+</script>
+
+<script id="cyber-writing-controller">
+/* CYBER WRITING TEST — presentation-only. Original exam, game, OCR, JSON,
+   learning logic, score and handwriting rendering are never reassigned. */
+(()=>{
+'use strict';
+const D=document,B=D.body,$=id=>D.getElementById(id),btn=$('cyberSwitch');
+const mark=D.querySelector('.cy-writing-logo');
+if(!btn||!mark)return;
+const KEY='Writing_Test.cyberUI.v2';
+const CY=()=>B.classList.contains('cyber');
+const reduced=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+const initialTitle=D.title;
+function setTheme(on,persist){
+ B.classList.toggle('cyber',on);btn.setAttribute('aria-pressed',String(on));
+ btn.querySelector('.cy-switch-symbol').textContent=on?'◧':'◢';
+ btn.querySelector('.cy-switch-label').textContent=on?'기본 UI':'CYBER UI';
+ btn.title=on?'기본 받아쓰기 UI로 전환':'CYBER WRITING UI로 전환';
+ D.title=on?'CYBER WRITING · 똑똑 받아쓰기':initialTitle;
+ if(persist)try{localStorage.setItem(KEY,on?'1':'0')}catch(_){}
+}
+btn.addEventListener('click',()=>{setTheme(!CY(),true);if(CY())spark(btn,1.1)},{passive:true});
+/* Graffiti: deliberately path-based, not a styled typeface. The SVG is baked
+   once to a transparent PNG where allowed to avoid repeated filter cost. */
+const G={
+ C:{w:59,p:[[[53,10],[17,2],[4,26],[2,69],[15,98],[55,89]],[[53,10],[46,23]]]},
+ Y:{w:59,p:[[[3,3],[28,52],[57,2]],[[28,52],[24,99]]]},
+ B:{w:60,p:[[[8,2],[5,98]],[[8,3],[45,7],[55,24],[38,47],[7,46]],[[8,50],[49,53],[58,77],[43,96],[4,98]]]},
+ E:{w:57,p:[[[54,4],[8,2],[3,98],[56,91]],[[5,48],[43,46]]]},
+ R:{w:62,p:[[[8,99],[6,2],[49,6],[57,28],[38,48],[7,49]],[[25,48],[61,99]]]},
+ W:{w:78,p:[[[2,2],[13,98],[38,52],[51,98],[78,3]]]},
+ I:{w:29,p:[[[15,2],[11,98]],[[3,5],[29,3]],[[2,96],[26,98]]]},
+ T:{w:61,p:[[[2,6],[59,6]],[[33,5],[25,99]]]},
+ N:{w:61,p:[[[5,99],[8,2],[51,97],[57,1]]]},
+ G:{w:62,p:[[[56,12],[21,2],[5,26],[5,74],[20,97],[56,85],[56,56],[37,57]],[[37,57],[63,52]]]},
+ S:{w:60,p:[[[56,8],[15,2],[4,24],[48,53],[57,77],[44,96],[2,91]]]},
+ ' ':{w:20,p:[]}
+};
+function random(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function graffiti(){
+ const rnd=random(20261104),j=v=>(rnd()*2-1)*v,lines=[{t:'CYBER',s:1.63,y:6},{t:'WRITING TEST',s:1.0,y:180}],GAP=13,VW=920;
+ const width=t=>[...t].reduce((n,ch)=>n+(G[ch]?.w||60),0)+GAP*(t.length-1);
+ let strokes='',thin='';
+ for(const L of lines){let x=(VW-width(L.t)*L.s)/2;
+  for(const ch of L.t){const glyph=G[ch];if(!glyph)continue;
+   for(const seg of glyph.p){const pts=seg.map(([a,b])=>[x+(a+j(2.1))*L.s,L.y+(b+j(2.1))*L.s]);
+    const aa=pts.at(-1),bb=pts.at(-2),d=Math.hypot(aa[0]-bb[0],aa[1]-bb[1])||1,k=(3+rnd()*7)/d;
+    pts[pts.length-1]=[aa[0]+(aa[0]-bb[0])*k,aa[1]+(aa[1]-bb[1])*k];
+    const path='M'+pts.map(p=>p.map(z=>z.toFixed(1)).join(',')).join('L');
+    strokes+=`<path d="${path}" stroke-width="${(6.2+rnd()*2.4).toFixed(1)}"/>`;
+    thin+=`<path d="${path}" stroke-width="${(1+rnd()*1.1).toFixed(1)}" opacity=".55"/>`;
+   }x+=(glyph.w+GAP)*L.s;
+  }
+ }
+ let scratches='';for(let i=0;i<13;i++){
+  const x=30+rnd()*820,y=12+rnd()*282,len=30+rnd()*95;
+  scratches+=`<path d="M${x.toFixed(1)},${y.toFixed(1)}l${len.toFixed(1)},${(-len*(.08+rnd()*.17)).toFixed(1)}" stroke-width="${(.6+rnd()*1.1).toFixed(1)}" opacity="${(.20+rnd()*.65).toFixed(2)}"/>`;
+ }
+ const edges='<path d="M142,318L444,301L429,314L778,291" stroke-width="3"/><path d="M170,326L733,302" stroke-width="1.3"/>';
+ const all=strokes+thin+scratches+edges;
+ const wrap='<g fill="none" stroke-linejoin="miter" stroke-linecap="butt">';
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -35 ${VW} 405" aria-hidden="true"><defs>
+  <filter id="cyWrNoise" x="-8%" y="-12%" width="116%" height="124%"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="8" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.8" xChannelSelector="R" yChannelSelector="G"/></filter>
+  <filter id="cyWrGlow" x="-16%" y="-28%" width="132%" height="156%"><feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs><g transform="translate(18 0) skewX(-10)">
+  <g transform="translate(-3 1)" opacity=".62" stroke="#00e8ff">${wrap}${strokes}</g></g>
+  <g transform="translate(4 -1)" opacity=".51" stroke="#ff2bd1">${wrap}${strokes}</g></g>
+  <g stroke="#fff" filter="url(#cyWrGlow)"><g filter="url(#cyWrNoise)">${wrap}${all}</g></g></g>
+  </g></svg>`;
+}
+(function mount(){const svg=graffiti();mark.innerHTML=svg;
+ try{
+  const W=1380,H=608,im=new Image();im.onload=()=>{
+   try{const c=D.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');
+    g.drawImage(im,0,0,W,H);const baked=new Image();baked.alt='';baked.decoding='async';
+    baked.onload=()=>{mark.replaceChildren(baked);c.width=c.height=1};
+    baked.src=c.toDataURL('image/png');
+   }catch(_){}
+  }; im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg.replace('<svg ',`<svg width="${W}" height="${H}" `));
+ }catch(_){}
+})();
+/* Reuse exactly one small FX canvas. No effect on pointermove/keystrokes,
+   no heavy full-screen particle simulation. */
+let cv=null,cx=null,raf=0,bolts=[],particles=[],rings=[],ox=0,oy=0;
+const SIZE=320,HALF=SIZE/2;
+function ensure(x,y){if(!cv){cv=D.createElement('canvas');cv.className='cy-writing-fx';cv.setAttribute('aria-hidden','true');
+ Object.assign(cv.style,{position:'fixed',left:'0',top:'0',width:SIZE+'px',height:SIZE+'px',zIndex:99998,pointerEvents:'none'});
+ B.appendChild(cv);const d=Math.min(1.5,devicePixelRatio||1);cv.width=(SIZE*d)|0;cv.height=(SIZE*d)|0;
+ cx=cv.getContext('2d');cx.setTransform(d,0,0,d,0,0)}
+ ox=x;oy=y;cv.style.transform=`translate3d(${x-HALF}px,${y-HALF}px,0)`}
+function bolt(x,y){const p=[[x,y]],a=Math.random()*Math.PI*2,len=18+Math.random()*46;
+ for(let k=1;k<=5;k++)p.push([x+Math.cos(a)*len*k/5+(Math.random()-.5)*13,y+Math.sin(a)*len*k/5+(Math.random()-.5)*13]);
+ bolts.push({p,life:7,c:Math.random()<.5?'#00e8ff':'#ff2bd1'})}
+function frame(){cx.clearRect(0,0,SIZE,SIZE);cx.globalCompositeOperation='lighter';cx.lineJoin='round';cx.lineCap='round';
+ bolts=bolts.filter(b=>{cx.beginPath();b.p.forEach(([x,y],i)=>i?cx.lineTo(x,y):cx.moveTo(x,y));
+  let a=b.life/7;cx.globalAlpha=a*.19;cx.strokeStyle=b.c;cx.lineWidth=6;cx.stroke();
+  cx.globalAlpha=a*.7;cx.lineWidth=2.4;cx.stroke();cx.globalAlpha=a;cx.strokeStyle='#fff';cx.lineWidth=1;cx.stroke();return --b.life>0});
+ rings=rings.filter(r=>{cx.globalAlpha=r.life/9*.75;cx.strokeStyle='#00e8ff';cx.lineWidth=1.2;cx.beginPath();cx.arc(r.x,r.y,r.rad,0,Math.PI*2);cx.stroke();r.rad+=2.8;return --r.life>0});
+ particles=particles.filter(p=>{cx.globalAlpha=Math.max(0,p.life/14);cx.strokeStyle=p.c;cx.lineWidth=1.1;cx.beginPath();cx.moveTo(p.x,p.y);p.x+=p.vx;p.y+=p.vy;p.vy+=.11;cx.lineTo(p.x,p.y);cx.stroke();return --p.life>0});
