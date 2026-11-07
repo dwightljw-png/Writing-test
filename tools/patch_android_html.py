@@ -118,9 +118,13 @@ key_persistence = """<script>
 })();
 </script>
 """
-if html.count("</body></html>") != 1:
+# Insert into the existing last script block to preserve the tested
+# 3-script structure in the original single-file app.
+final_script_end = "</script>\n\n</body></html>"
+if html.count(final_script_end) != 1:
     raise SystemExit("Unexpected document ending")
-html = html.replace("</body></html>", key_persistence + "</body></html>", 1)
+key_persistence = key_persistence.replace("<script>", "", 1).replace("</script>", "", 1)
+html = html.replace(final_script_end, key_persistence + final_script_end, 1)
 
 path.write_text(html, encoding="utf-8")
 print("Android Writing Test HTML patched:", path.stat().st_size)
