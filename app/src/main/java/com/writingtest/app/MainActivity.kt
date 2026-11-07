@@ -13,6 +13,14 @@ import android.print.PrintAttributes
 import android.print.PrintManager
 import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import android.os.Handler
 import android.os.Looper
 import android.webkit.ConsoleMessage
@@ -311,6 +319,66 @@ class MainActivity : AppCompatActivity() {
         if (result == TextToSpeech.ERROR) toast("음성을 재생하지 못했습니다.")
     }
 
+    // APK-only API key persistence: AndroidKeyStore-backed AES-GCM.
+    // The key is never written into HTML, WebView localStorage, or study exports.
+    private fun getApiEncryptionKey(): SecretKey {
+        val alias = "WritingTest_Gemini_ApiKey_v1"
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (keyStore.getKey(alias, null) as? SecretKey)?.let { return it }
+        val generator = KeyGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
+        )
+        generator.init(
+            KeyGenParameterSpec.Builder(
+                alias,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            ).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build()
+        )
+        return generator.generateKey()
+    }
+
+    private fun saveEncryptedApiKey(key: String) {
+        val clean = key.trim().take(256)
+        if (clean.isEmpty()) {
+            deleteEncryptedApiKey()
+            return
+        }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, getApiEncryptionKey())
+        val bytes = cipher.doFinal(clean.toByteArray(Charsets.UTF_8))
+        val packet = cipher.iv + bytes
+        getSharedPreferences("writing_test_app_private", Context.MODE_PRIVATE)
+            .edit()
+            .putString("gemini_api_encrypted", Base64.encodeToString(packet, Base64.NO_WRAP))
+            .commit()
+    }
+
+    private fun loadEncryptedApiKey(): String {
+        val prefs = getSharedPreferences("writing_test_app_private", Context.MODE_PRIVATE)
+        val packet64 = prefs.getString("gemini_api_encrypted", null) ?: return ""
+        return try {
+            val packet = Base64.decode(packet64, Base64.DEFAULT)
+            if (packet.size < 29) return ""
+            val iv = packet.copyOfRange(0, 12)
+            val ciphertext = packet.copyOfRange(12, packet.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, getApiEncryptionKey(), GCMParameterSpec(128, iv))
+            String(cipher.doFinal(ciphertext), Charsets.UTF_8)
+        } catch (_: Exception) {
+            // Preserve unreadable encrypted data for investigation, but never
+            // silently use it or replace the correct API key with blank text.
+            ""
+        }
+    }
+
+    private fun deleteEncryptedApiKey() {
+        getSharedPreferences("writing_test_app_private", Context.MODE_PRIVATE)
+            .edit().remove("gemini_api_encrypted").commit()
+    }
+
     private fun grantWebPermissionRequest(request: PermissionRequest) {
         request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
     }
@@ -320,6 +388,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private inner class AndroidBridge {
+        @JavascriptInterface
+        fun getSavedGeminiApiKey(): String = loadEncryptedApiKey()
+
+        @JavascriptInterface
+        fun setSavedGeminiApiKey(key: String) {
+            try { saveEncryptedApiKey(key) }
+            catch (_: Exception) {
+                runOnUiThread { toast("API 키 보관에 실패했습니다. 기기 저장소 상태를 확인하세요.") }
+            }
+        }
+
+        @JavascriptInterface
+        fun deleteSavedGeminiApiKey() {
+            deleteEncryptedApiKey()
+        }
+
         @JavascriptInterface
         fun ttsSpeak(text: String, rate: Double) {
             runOnUiThread { speakNative(text, rate.toFloat()) }

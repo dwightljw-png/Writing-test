@@ -70,5 +70,57 @@ if html.count(old_voice_help) != 1:
     raise SystemExit("Expected one voice help message")
 html = html.replace(old_voice_help, new_voice_help, 1)
 
+
+# APK only: persist the entered Gemini API key in Android's app-private
+# AES-GCM storage backed by AndroidKeyStore. Browser HTML remains unchanged.
+# Clearing the input deletes the securely stored key. Nothing enters backups.
+api_key_hint_old = 'title="개인용 API 키. 저장되지 않으며 손글씨 이미지/PDF가 Google로 전송될 수 있습니다."'
+api_key_hint_new = 'title="APK 내부에 암호화 저장됩니다. 입력칸을 비우면 저장된 키도 삭제됩니다. OCR 이미지/PDF는 Google로 전송될 수 있습니다."'
+if html.count(api_key_hint_old) != 1:
+    raise SystemExit("Gemini key title changed unexpectedly")
+html = html.replace(api_key_hint_old, api_key_hint_new, 1)
+key_persistence = """<script>
+(function(){
+  'use strict';
+  var native = window.AndroidApp;
+  var field = document.getElementById('geminiKey');
+  if(!field || !native || typeof native.getSavedGeminiApiKey !== 'function') return;
+  var saveTimer = null;
+  function saveNow(){
+    if(saveTimer !== null){clearTimeout(saveTimer);saveTimer = null;}
+    var value = field.value.trim();
+    try {
+      if(value){native.setSavedGeminiApiKey(value);}
+      else{native.deleteSavedGeminiApiKey();}
+    }catch(_){}
+  }
+  try {
+    var saved = native.getSavedGeminiApiKey();
+    if(saved){
+      field.value = saved;
+      field.dispatchEvent(new Event('input',{bubbles:true}));
+    }
+  }catch(_){}
+  field.addEventListener('input',function(){
+    if(saveTimer !== null){clearTimeout(saveTimer);saveTimer = null;}
+    if(!field.value.trim()){
+      try{native.deleteSavedGeminiApiKey();}catch(_){}
+      return;
+    }
+    saveTimer = setTimeout(saveNow,350);
+  });
+  field.addEventListener('change',saveNow);
+  field.addEventListener('blur',saveNow);
+  window.addEventListener('pagehide',saveNow);
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) saveNow();
+  });
+})();
+</script>
+"""
+if html.count("</body></html>") != 1:
+    raise SystemExit("Unexpected document ending")
+html = html.replace("</body></html>", key_persistence + "</body></html>", 1)
+
 path.write_text(html, encoding="utf-8")
 print("Android Writing Test HTML patched:", path.stat().st_size)
