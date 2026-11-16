@@ -222,7 +222,7 @@ patch_erase('<button id="gameSlow" class="btn soft" type="button">🐢 천천히
 patch_erase('<button id="slowBtn" class="btn secondary big">🐢 천천히</button>','','exam slow button')
 patch_erase(" $('gameSlow').addEventListener('click',()=>{if(game)speak(game.items[game.at][0],true)});\n",'','game slow handler')
 patch_erase("$('slowBtn').addEventListener('click',()=>speak(currentItem()[0],true));",'','exam slow handler')
-patch_erase(" // The old 0.75 multiplier slurred some engines; keep slow playback clear.\n u.rate=slow?Math.max(.8,Math.min(.9,base*.9)):base;",
+patch_erase(" // The old 0.75 multiplier slurred some engines; keep slow playback clear.\n u.rate=slow?Math.max(.7,Math.min(.82,base*.78)):base;",
 " u.rate=base;",'browser speech rate')
 patch_erase('문장을 다시 듣거나 천천히 들을 수 있어요.','문장을 다시 듣고 천천히 써 보세요.','speech hint')
 patch_erase('듣기를 다시 누르거나 천천히 들을 수 있어요.','필요하면 다시 듣기를 누르세요.','paper hint')
