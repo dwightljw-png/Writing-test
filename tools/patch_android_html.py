@@ -36,12 +36,11 @@ html = html.replace(old, replacement, 1)
 # speech playback to the existing native AndroidApp JS bridge. This patch
 # runs on the assembled APK HTML; the original v2.1 source stays unchanged.
 old_speak = "function speak(str,slow=false){"
-native_speak = """function speak(str,slow=false){
+native_speak = """function speak(str){
  if(window.AndroidApp&&typeof window.AndroidApp.ttsSpeak==='function'){
   let base=Number(db.settings.rate);if(!Number.isFinite(base))base=.95;
   base=Math.max(.8,Math.min(1.15,base));
-  const rate=slow?Math.max(.7,Math.min(.82,base*.78)):base;
-  window.AndroidApp.ttsSpeak(String(str),rate);
+  window.AndroidApp.ttsSpeak(String(str),base);
   return;
  }
 """
@@ -215,6 +214,33 @@ patch_erase("u.rate=slow?Math.max(.8,Math.min(.9,base*.9)):base;",
 patch_erase("strokes=[];currentStroke=null;repaint();$('typeAnswer')",
 "strokes=[];currentStroke=null;inkHistory=[];repaint();$('typeAnswer')",
 'retry clears ink undo history')
+
+
+# v2.1.3: The separate slow button has no audible effect on tested Android
+# devices; remove it from both exam and game, including its dead listeners.
+patch_erase('<button id="gameSlow" class="btn soft" type="button">🐢 천천히</button>','','game slow button')
+patch_erase('<button id="slowBtn" class="btn secondary big">🐢 천천히</button>','','exam slow button')
+patch_erase(" $('gameSlow').addEventListener('click',()=>{if(game)speak(game.items[game.at][0],true)});\n",'','game slow handler')
+patch_erase("$('slowBtn').addEventListener('click',()=>speak(currentItem()[0],true));",'','exam slow handler')
+patch_erase(" // The old 0.75 multiplier slurred some engines; keep slow playback clear.\n u.rate=slow?Math.max(.8,Math.min(.9,base*.9)):base;",
+" u.rate=base;",'browser speech rate')
+patch_erase('문장을 다시 듣거나 천천히 들을 수 있어요.','문장을 다시 듣고 천천히 써 보세요.','speech hint')
+patch_erase('듣기를 다시 누르거나 천천히 들을 수 있어요.','필요하면 다시 듣기를 누르세요.','paper hint')
+patch_erase('‘천천히’는 발음이 지나치게 늘어지지 않도록 조절했습니다. ','','speech notice')
+
+# Remove hardware-specific stylus barrel-button workarounds. They did not
+# work with the actual Lenovo tablet; keep the reliable touch/pen eraser.
+patch_erase("function stylusEraser(e){\n try{if(window.AndroidApp&&typeof AndroidApp.isStylusEraserActive==='function'&&AndroidApp.isStylusEraserActive())return true}catch(_){}\n if(e.pointerType!=='pen')return false;return e.button===5||e.button===2||!!(e.buttons&(2|32|64))}\n",'','remove stylus function')
+patch_erase('eraserPointer=eraserSelected||stylusEraser(e);','eraserPointer=eraserSelected;','remove pen barrel handling')
+patch_erase('title="눌러서 지우개 선택 · 펜 옆 버튼을 누르는 동안에도 지우개"','title="한 번 지우고 펜을 떼면 자동으로 연필로 돌아옵니다"','eraser tooltip')
+patch_erase(
+" if(currentStroke){strokes.push(currentStroke);currentStroke=null;repaint()}\n inkPointer=null;eraserPointer=false;lastErase=null;",
+" if(currentStroke){strokes.push(currentStroke);currentStroke=null;repaint()}\n if(eraserPointer&&eraserSelected)setEraser(false); // Pen-up returns to writing.\n inkPointer=null;eraserPointer=false;lastErase=null;",
+'auto pen after eraser gesture')
+
+# Keep UI/application version consistent with the generated APK and HTML.
+html = html.replace('Writing Test v2.1', 'Writing Test v2.1.3').replace(
+    'CYBER WRITING v2.1','CYBER WRITING v2.1.3')
 
 path.write_text(html, encoding="utf-8")
 print("Android Writing Test HTML patched:", path.stat().st_size)

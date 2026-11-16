@@ -32,7 +32,6 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
-import android.view.MotionEvent
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
@@ -64,7 +63,6 @@ class MainActivity : AppCompatActivity() {
     private var ttsInitGeneration = 0
     private var ttsInitFailed = false
     private var hasResumedOnce = false
-    @Volatile private var stylusEraserPressed = false
 
     private val pickImageLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -167,20 +165,6 @@ class MainActivity : AppCompatActivity() {
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
 
-        // Observe stylus barrel buttons without consuming any handwriting touch events.
-        // Lenovo pens can report the side button through Android MotionEvent even
-        // when WebView PointerEvent.buttons does not expose it.
-        webView.setOnTouchListener { _, e ->
-            val kind = if (e.pointerCount > 0) e.getToolType(0) else MotionEvent.TOOL_TYPE_UNKNOWN
-            val pressed = e.buttonState and (
-                MotionEvent.BUTTON_STYLUS_PRIMARY or MotionEvent.BUTTON_STYLUS_SECONDARY
-            ) != 0
-            stylusEraserPressed = (kind == MotionEvent.TOOL_TYPE_ERASER ||
-                (kind == MotionEvent.TOOL_TYPE_STYLUS && pressed)) &&
-                e.actionMasked != MotionEvent.ACTION_UP &&
-                e.actionMasked != MotionEvent.ACTION_CANCEL
-            false
-        }
         webView.addJavascriptInterface(AndroidBridge(), "AndroidApp")
         webView.webViewClient = object : WebViewClientCompat() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -404,9 +388,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private inner class AndroidBridge {
-        @JavascriptInterface
-        fun isStylusEraserActive(): Boolean = stylusEraserPressed
-
         @JavascriptInterface
         fun getSavedGeminiApiKey(): String = loadEncryptedApiKey()
 
