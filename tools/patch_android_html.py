@@ -40,7 +40,7 @@ native_speak = """function speak(str,slow=false){
  if(window.AndroidApp&&typeof window.AndroidApp.ttsSpeak==='function'){
   let base=Number(db.settings.rate);if(!Number.isFinite(base))base=.95;
   base=Math.max(.8,Math.min(1.15,base));
-  const rate=slow?Math.max(.8,Math.min(.9,base*.9)):base;
+  const rate=slow?Math.max(.7,Math.min(.82,base*.78)):base;
   window.AndroidApp.ttsSpeak(String(str),rate);
   return;
  }
@@ -125,6 +125,92 @@ if html.count(final_script_end) != 1:
     raise SystemExit("Unexpected document ending")
 key_persistence = key_persistence.replace("<script>", "", 1).replace("</script>", "", 1)
 html = html.replace(final_script_end, key_persistence + final_script_end, 1)
+
+
+# Handwriting eraser: applies to the APK-bundled v2.1 HTML only.
+def patch_erase(old,new,label):
+    global html
+    n=html.count(old)
+    if n!=1:
+        raise SystemExit("Handwriting patch anchor mismatch for %s: %s"%(label,n))
+    html=html.replace(old,new,1)
+
+patch_erase('<button id="undoBtn" class="btn soft">',
+'<button type="button" id="eraserBtn" class="btn soft" aria-pressed="false" title="눌러서 지우개 선택 · 펜 옆 버튼을 누르는 동안에도 지우개">🧽 지우개</button><button id="undoBtn" class="btn soft">','eraser button')
+patch_erase('.paper canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}',
+'''.paper canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+#eraserBtn.eraserOn{border-color:#2563eb;background:#dbeafe;color:#1e40af;box-shadow:inset 0 0 0 1px #60a5fa}
+body.cyber #eraserBtn.eraserOn{background:linear-gradient(180deg,#093c48,#081a2e);border-color:#00e8ff;color:#eaffff;box-shadow:inset 0 0 15px rgba(0,232,255,.38),0 0 7px #00e8ff,0 0 18px rgba(0,232,255,.5)}''',
+'eraser style')
+
+original_ink = """function repaint(){ctx.clearRect(0,0,drawSize.w,drawSize.h);for(const stroke of strokes)paintStroke(stroke);if(currentStroke)paintStroke(currentStroke)}
+function point(e){let r=canvas.getBoundingClientRect();return [Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))]}
+canvas.addEventListener('pointerdown',e=>{if(!session||$('resultArea').classList.contains('hidden')===false)return;e.preventDefault();currentStroke=[point(e)];try{canvas.setPointerCapture(e.pointerId)}catch(_){}repaint()});
+canvas.addEventListener('pointermove',e=>{if(!currentStroke)return;e.preventDefault();currentStroke.push(point(e));repaint()});
+function finishStroke(){if(currentStroke){strokes.push(currentStroke);currentStroke=null;repaint()}}
+canvas.addEventListener('pointerup',finishStroke);canvas.addEventListener('pointercancel',finishStroke);window.addEventListener('resize',resizeCanvas);"""
+new_ink = """function repaint(){ctx.clearRect(0,0,drawSize.w,drawSize.h);for(const stroke of strokes)paintStroke(stroke);if(currentStroke)paintStroke(currentStroke)}
+function point(e){let r=canvas.getBoundingClientRect();return [Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))]}
+// The eraser removes real normalized stroke samples; OCR uses these cleaned strokes.
+let eraserSelected=false,eraserPointer=false,inkPointer=null,lastErase=null,inkHistory=[];
+function rememberInk(){inkHistory.push(strokes.map(line=>line.map(pt=>pt.slice())));if(inkHistory.length>24)inkHistory.shift()}
+function setEraser(on){eraserSelected=!!on;const b=$('eraserBtn');b.classList.toggle('eraserOn',eraserSelected);b.setAttribute('aria-pressed',String(eraserSelected));b.textContent=eraserSelected?'✏️ 펜으로 쓰기':'🧽 지우개';canvas.style.cursor=eraserSelected?'cell':'crosshair'}
+function stylusEraser(e){if(e.pointerType!=='pen')return false;
+ if(e.button===5||e.button===2||(e.buttons&(2|32|64)))return true;
+ try{return !!(window.AndroidApp&&typeof AndroidApp.isStylusEraserActive==='function'&&AndroidApp.isStylusEraserActive())}catch(_){return false}}
+function eraseAt(pt){const w=drawSize.w,h=drawSize.h;if(!w||!h)return false;
+ const rr=19*19,px=pt[0]*w,py=pt[1]*h;let altered=false,next=[];
+ for(const stroke of strokes){if(!stroke.length)continue;
+  let hit=false;
+  for(let i=0;i<stroke.length;i++){
+   const a=stroke[i],b=stroke[Math.min(i+1,stroke.length-1)];const ax=a[0]*w,ay=a[1]*h,bx=b[0]*w,by=b[1]*h;
+   const dx=bx-ax,dy=by-ay,t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/(dx*dx+dy*dy||1)));
+   if((px-ax-t*dx)**2+(py-ay-t*dy)**2<=rr){hit=true;break}
+  }
+  if(!hit){next.push(stroke);continue}
+  altered=true;let fragment=[];
+  const keep=()=>{if(fragment.length){next.push(fragment);fragment=[]}};
+  if(stroke.length===1)continue;
+  for(let i=0;i<stroke.length-1;i++){
+   const a=stroke[i],b=stroke[i+1];let segPx=Math.hypot((b[0]-a[0])*w,(b[1]-a[1])*h);
+   let n=Math.max(1,Math.ceil(segPx/5));
+   for(let j=(i===0?0:1);j<=n;j++){
+    const t=j/n,x=a[0]+(b[0]-a[0])*t,y=a[1]+(b[1]-a[1])*t;
+    if(((x*w-px)**2+(y*h-py)**2)<=rr)keep();
+    else fragment.push([x,y]);
+   }
+  }
+  keep();
+ }
+ if(altered){strokes=next;repaint()}return altered
+}
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('pointerdown',e=>{if(!session||$('resultArea').classList.contains('hidden')===false)return;
+ e.preventDefault();if(inkPointer!==null)return;inkPointer=e.pointerId;eraserPointer=eraserSelected||stylusEraser(e);
+ rememberInk();const p=point(e);lastErase=p;
+ if(eraserPointer){currentStroke=null;eraseAt(p)}else{currentStroke=[p];repaint()}
+ try{canvas.setPointerCapture(e.pointerId)}catch(_){}
+});
+canvas.addEventListener('pointermove',e=>{if(inkPointer!==e.pointerId)return;e.preventDefault();const p=point(e);
+ if(eraserPointer){if(!lastErase||Math.hypot((p[0]-lastErase[0])*drawSize.w,(p[1]-lastErase[1])*drawSize.h)>2){
+  const old=lastErase||p,dist=Math.hypot((p[0]-old[0])*drawSize.w,(p[1]-old[1])*drawSize.h),n=Math.max(1,Math.ceil(dist/9));
+  for(let i=1;i<=n;i++)eraseAt([old[0]+(p[0]-old[0])*i/n,old[1]+(p[1]-old[1])*i/n]);lastErase=p}
+ }else if(currentStroke){currentStroke.push(p);repaint()}
+});
+function finishStroke(e){if(e&&inkPointer!==e.pointerId)return;
+ if(currentStroke){strokes.push(currentStroke);currentStroke=null;repaint()}
+ inkPointer=null;eraserPointer=false;lastErase=null;
+}
+canvas.addEventListener('pointerup',finishStroke);canvas.addEventListener('pointercancel',finishStroke);window.addEventListener('resize',resizeCanvas);"""
+patch_erase(original_ink,new_ink,'pointer drawing/erasing')
+patch_erase("strokes=session.autoHand?(session.handDrafts[session.at]||[]).map(line=>line.map(p=>p.slice())):[];currentStroke=null;",
+"strokes=session.autoHand?(session.handDrafts[session.at]||[]).map(line=>line.map(p=>p.slice())):[];currentStroke=null;inkPointer=null;eraserPointer=false;inkHistory=[];",'question reset')
+patch_erase("$('undoBtn').addEventListener('click',()=>{strokes.pop();repaint()});",
+"$('eraserBtn').addEventListener('click',()=>setEraser(!eraserSelected));$('undoBtn').addEventListener('click',()=>{if(inkHistory.length)strokes=inkHistory.pop();else strokes.pop();repaint()});",'undo and toggle')
+patch_erase("strokes=[];repaint()}});$('checkBtn')",
+"rememberInk();strokes=[];repaint()}});$('checkBtn')",'clear undo')
+patch_erase("u.rate=slow?Math.max(.8,Math.min(.9,base*.9)):base;",
+"u.rate=slow?Math.max(.7,Math.min(.82,base*.78)):base;",'browser slow speed')
 
 path.write_text(html, encoding="utf-8")
 print("Android Writing Test HTML patched:", path.stat().st_size)
