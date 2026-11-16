@@ -155,9 +155,9 @@ function point(e){let r=canvas.getBoundingClientRect();return [Math.max(0,Math.m
 let eraserSelected=false,eraserPointer=false,inkPointer=null,lastErase=null,inkHistory=[];
 function rememberInk(){inkHistory.push(strokes.map(line=>line.map(pt=>pt.slice())));if(inkHistory.length>24)inkHistory.shift()}
 function setEraser(on){eraserSelected=!!on;const b=$('eraserBtn');b.classList.toggle('eraserOn',eraserSelected);b.setAttribute('aria-pressed',String(eraserSelected));b.textContent=eraserSelected?'✏️ 펜으로 쓰기':'🧽 지우개';canvas.style.cursor=eraserSelected?'cell':'crosshair'}
-function stylusEraser(e){if(e.pointerType!=='pen')return false;
- if(e.button===5||e.button===2||(e.buttons&(2|32|64)))return true;
- try{return !!(window.AndroidApp&&typeof AndroidApp.isStylusEraserActive==='function'&&AndroidApp.isStylusEraserActive())}catch(_){return false}}
+function stylusEraser(e){
+ try{if(window.AndroidApp&&typeof AndroidApp.isStylusEraserActive==='function'&&AndroidApp.isStylusEraserActive())return true}catch(_){}
+ if(e.pointerType!=='pen')return false;return e.button===5||e.button===2||!!(e.buttons&(2|32|64))}
 function eraseAt(pt){const w=drawSize.w,h=drawSize.h;if(!w||!h)return false;
  const rr=19*19,px=pt[0]*w,py=pt[1]*h;let altered=false,next=[];
  for(const stroke of strokes){if(!stroke.length)continue;
@@ -211,6 +211,10 @@ patch_erase("strokes=[];repaint()}});$('checkBtn')",
 "rememberInk();strokes=[];repaint()}});$('checkBtn')",'clear undo')
 patch_erase("u.rate=slow?Math.max(.8,Math.min(.9,base*.9)):base;",
 "u.rate=slow?Math.max(.7,Math.min(.82,base*.78)):base;",'browser slow speed')
+
+patch_erase("strokes=[];currentStroke=null;repaint();$('typeAnswer')",
+"strokes=[];currentStroke=null;inkHistory=[];repaint();$('typeAnswer')",
+'retry clears ink undo history')
 
 path.write_text(html, encoding="utf-8")
 print("Android Writing Test HTML patched:", path.stat().st_size)
